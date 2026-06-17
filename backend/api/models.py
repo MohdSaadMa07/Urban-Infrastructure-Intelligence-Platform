@@ -27,3 +27,33 @@ class CivicMetrics(models.Model):
 
     def __str__(self):
         return f"{self.ward.ward_name} - {self.year}"
+
+
+class Complaint(models.Model):
+    CATEGORY_CHOICES = [
+        ('pothole', 'Potholes'),
+        ('water', 'Water Supply'),
+        ('drainage', 'Drainage'),
+        ('garbage', 'Garbage'),
+        ('streetlight', 'Street Lights'),
+        ('road', 'Roads'),
+        ('other', 'Other'),
+    ]
+    STATUS_CHOICES = [
+        ('open', 'Open'),
+        ('in_progress', 'In Progress'),
+        ('resolved', 'Resolved'),
+    ]
+    ward = models.ForeignKey(Ward, on_delete=models.CASCADE, related_name='complaints')
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    description = models.TextField()
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.get_category_display()} - Ward {self.ward.ward_name}"

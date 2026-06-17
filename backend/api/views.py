@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.contrib.gis.geos import Point
-from api.models import Ward, CivicMetrics
+from api.models import Ward, CivicMetrics, Complaint
 from api.services.health_score import compute_health_score
 import json
 
@@ -116,4 +116,91 @@ def health_scores(request):
                 'breakdown': None,
             })
 
-    return Response(results)
+    return Response(results)
+
+
+@api_view(['POST'])
+def submit_complaint(request):
+    """Create a complaint. Auto-detects ward from coordinates."""
+    category = request.data.get('category')
+    description = request.data.get('description')
+    latitude = request.data.get('latitude')
+    longitude = request.data.get('longitude')
+
+    if not all([category, description, latitude, longitude]):
+        return Response(
+            {'error': 'category, description, latitude, and longitude are required.'},
+            status=400,
+        )
+
+    valid_categories = [c[0] for c in Complaint.CATEGORY_CHOICES]
+    if category not in valid_categories:
+        return Response(
+            {'error': f'Invalid category. Choose from: {valid_categories}'},
+            status=400,
+        )
+
+    try:
+        latitude = float(latitude)
+        longitude = float(longitude)
+    except (TypeError, ValueError):
+        return Response({'error': 'Invalid coordinates'}, status=400)
+
+    point = Point(longitude, latitude, srid=4326)
+    ward = Ward.objects.filter(boundary__contains=point).first()
+
+    if not ward:
+        return Response(
+            {'error': 'Location does not fall within any known ward.'},
+            status=404,
+        )
+
+    complaint = Complaint.objects.create(
+        ward=ward,
+        category=category,
+        description=description,
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+    return Response(
+        {
+            'id': complaint.id,
+            'category': complaint.get_category_display(),
+            'description': complaint.description,
+            'latitude': complaint.latitude,
+            'longitude': complaint.longitude,
+            'status': complaint.status,
+            'ward_no': ward.ward_no,
+            'ward_name': ward.ward_name,
+            'created_at': complaint.created_at.isoformat(),
+        },
+        status=201,
+    )
+
+
+@api_view(['GET'])
+def list_complaints(request):
+    """List complaints, optionally filtered by ward name."""
+    ward_name = request.GET.get('ward')
+    qs = Complaint.objects.select_related('ward').all()
+
+    if ward_name:
+        qs = qs.filter(ward__ward_name__iexact=ward_name.strip())
+
+    data = [
+        {
+            'id': c.id,
+            'category': c.get_category_display(),
+            'description': c.description,
+            'latitude': c.latitude,
+            'longitude': c.longitude,
+            'status': c.status,
+            'ward_no': c.ward.ward_no,
+            'ward_name': c.ward.ward_name,
+            'created_at': c.created_at.isoformat(),
+        }
+        for c in qs
+    ]
+
+    return Response(data)

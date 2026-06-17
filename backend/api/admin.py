@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Ward, CivicMetrics
+from .models import Ward, CivicMetrics, Complaint
 
 @admin.register(Ward)
 class WardAdmin(admin.ModelAdmin):
@@ -14,3 +14,8 @@ class CivicMetricsAdmin(admin.ModelAdmin):
     list_filter = ('year', 'ward')
     search_fields = ('ward__ward_name',)
 
+@admin.register(Complaint)
+class ComplaintAdmin(admin.ModelAdmin):
+    list_display = ('id', 'category', 'ward', 'status', 'created_at')
+    list_filter = ('status', 'category', 'ward')
+    search_fields = ('description', 'ward__ward_name')

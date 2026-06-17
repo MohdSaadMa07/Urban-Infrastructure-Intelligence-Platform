@@ -2,12 +2,15 @@
 Health Score calculation service.
 
 Computes a 0-100 infrastructure health score for a ward based on
-civic metrics using a simple weighted-sum formula.
+civic metrics that genuinely vary across Mumbai's 24 wards.
 
-Score components:
-  - Closure rate      (40%): higher is better
-  - Escalation rate   (30%): lower is better
-  - Resolution speed  (30%): faster is better
+Score components (sourced from ward_complaints.csv via CivicMetrics):
+  - Per-capita complaints  (35%): lower  = better civic infrastructure
+  - Avg resolution days    (35%): lower  = better responsiveness
+  - Per-capita deliberations (30%): higher = better civic engagement
+
+Each component is normalized with a sigmoid / decay function tuned to
+the observed data ranges so scores spread meaningfully (≈ 20-95).
 
 Qualitative labels:
   >= 70  → Good
@@ -15,47 +18,70 @@ Qualitative labels:
   <  45  → Poor
 """
 
+import math
+
+
+def _sigmoid(x, midpoint, steepness):
+    """
+    Logistic sigmoid mapped to 0-1.
+
+    Returns ~0.5 when x == midpoint.
+    `steepness` controls how quickly the curve transitions.
+    """
+    return 1.0 / (1.0 + math.exp(steepness * (x - midpoint)))
+
 
 def compute_health_score(metrics):
     """
     Compute an infrastructure health score (0-100) for a single CivicMetrics row.
 
+    Uses three ward-level indicators that vary meaningfully across
+    Mumbai's 24 wards, rather than the fixed closure / escalation rates
+    produced by the data loader.
+
     Args:
-        metrics: A CivicMetrics model instance.
+        metrics: A CivicMetrics model instance with at least:
+                 per_capita_complaints, avg_resolution_days,
+                 per_capita_deliberations.
 
     Returns:
-        dict with keys: score (float), label (str), breakdown (dict)
+        dict with keys:
+          score     – float, 0-100
+          label     – str, one of 'Good', 'Moderate', 'Poor'
+          breakdown – dict of per-component raw values and normalised scores
     """
-    total = metrics.total_complaints or 1
-    closed = metrics.closed_complaints or 0
-    escalated = metrics.escalated_complaints or 0
-    avg_days = metrics.avg_resolution_days or 0
+    complaints = getattr(metrics, 'per_capita_complaints', None) or 0
+    avg_days = getattr(metrics, 'avg_resolution_days', None) or 0
+    deliberations = getattr(metrics, 'per_capita_deliberations', None) or 0
 
-    # --- Component 1: Closure rate (higher = better) ---
-    closure_rate = closed / total
-    closure_score = closure_rate  # 0.0 – 1.0
+    # --- Component 1: Per-capita complaints (lower = better) ---
+    # Data range: ~2 761 – 10 298.  Midpoint 6 500, steepness 0.0008.
+    # 2 761 → ~0.95,  6 500 → 0.50,  10 298 → ~0.05
+    complaint_score = _sigmoid(complaints, midpoint=6500, steepness=0.0008)
 
-    # --- Component 2: Escalation rate (lower = better) ---
-    escalation_rate = escalated / total
-    escalation_score = 1 - escalation_rate  # 0.0 – 1.0
+    # --- Component 2: Avg resolution days (lower = better) ---
+    # Data range: ~19 – 68.  Midpoint 40, steepness 0.12.
+    # 19 → ~0.93,  40 → 0.50,  68 → ~0.03
+    resolution_score = _sigmoid(avg_days, midpoint=40, steepness=0.12)
 
-    # --- Component 3: Resolution speed (faster = better) ---
-    # Normalize: 1 day → ~1.0, 30 days → ~0.5, 90 days → ~0.25
-    # Using a decay function: 15 / (avg_days + 15)
-    resolution_score = 15.0 / (avg_days + 15.0)  # 0.0 – 1.0
+    # --- Component 3: Per-capita deliberations (higher = better) ---
+    # Data range: ~24 – 95.  Midpoint 55, steepness 0.10.
+    # Inverted: higher deliberation → higher score.
+    # 95 → ~0.98,  55 → 0.50,  24 → ~0.04
+    deliberation_score = _sigmoid(deliberations, midpoint=55, steepness=-0.10)
 
     # --- Weighted sum ---
-    WEIGHT_CLOSURE = 0.40
-    WEIGHT_ESCALATION = 0.30
-    WEIGHT_RESOLUTION = 0.30
+    WEIGHT_COMPLAINTS = 0.35
+    WEIGHT_RESOLUTION = 0.35
+    WEIGHT_DELIBERATION = 0.30
 
     raw_score = (
-        WEIGHT_CLOSURE * closure_score
-        + WEIGHT_ESCALATION * escalation_score
+        WEIGHT_COMPLAINTS * complaint_score
         + WEIGHT_RESOLUTION * resolution_score
+        + WEIGHT_DELIBERATION * deliberation_score
     ) * 100
 
-    score = round(max(0, min(100, raw_score)), 2)
+    score = round(max(0.0, min(100.0, raw_score)), 2)
 
     # --- Qualitative label ---
     if score >= 70:
@@ -69,12 +95,12 @@ def compute_health_score(metrics):
         'score': score,
         'label': label,
         'breakdown': {
-            'closure_rate': round(closure_rate * 100, 1),
-            'escalation_rate': round(escalation_rate * 100, 1),
+            'per_capita_complaints': complaints,
             'avg_resolution_days': avg_days,
-            'closure_score': round(closure_score, 4),
-            'escalation_score': round(escalation_score, 4),
+            'per_capita_deliberations': deliberations,
+            'complaint_score': round(complaint_score, 4),
             'resolution_score': round(resolution_score, 4),
+            'deliberation_score': round(deliberation_score, 4),
         },
     }
 
