@@ -12,10 +12,14 @@ class Ward(models.Model):
 class CivicMetrics(models.Model):
     ward = models.ForeignKey(Ward, on_delete=models.CASCADE, related_name='metrics')
     year = models.PositiveSmallIntegerField()
-    total_complaints = models.IntegerField()
-    closed_complaints = models.IntegerField()
-    escalated_complaints = models.IntegerField()
-    avg_resolution_days = models.FloatField()
+    total_complaints = models.IntegerField(default=0)
+    closed_complaints = models.IntegerField(default=0)
+    escalated_complaints = models.IntegerField(default=0)
+    avg_resolution_days = models.FloatField(default=0)
+    per_capita_complaints = models.IntegerField(default=0)
+    total_deliberations = models.IntegerField(default=0)
+    per_capita_deliberations = models.IntegerField(default=0)
+    avg_councillors = models.IntegerField(default=0)
 
     class Meta:
         unique_together = (('ward', 'year'),)
