@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Health score color mapping — transparent fills
+// Health score color mapping -- transparent fills
 const getHealthColor = (label) => {
   switch (label) {
     case 'Good':     return { fill: 'rgba(34, 197, 94, 0.35)',  border: '#22c55e' }; // green
@@ -24,7 +24,7 @@ const MumbaiMap = ({ onWardClick }) => {
       fetch('/api/health-scores/').then(r => r.json()),
     ])
       .then(([geo, scores]) => {
-        // Build a lookup: ward_name → full score data
+        // Build a lookup: ward_name -> full score data
         const map = {};
         scores.forEach(s => {
           map[s.ward_name] = s;
@@ -55,7 +55,7 @@ const MumbaiMap = ({ onWardClick }) => {
 
     const scoreText = health?.health_score != null
       ? `${health.health_score}`
-      : '—';
+      : '--';
     const labelText = health?.label || 'No Data';
     const labelClass = (health?.label || 'nodata').toLowerCase();
 
@@ -99,11 +99,11 @@ const MumbaiMap = ({ onWardClick }) => {
         <div className="legend-title">Health Score</div>
         <div className="legend-item">
           <span className="legend-swatch" style={{ background: 'rgba(34, 197, 94, 0.5)' }}></span>
-          Good (≥ 70)
+          Good ({'>='} 70)
         </div>
         <div className="legend-item">
           <span className="legend-swatch" style={{ background: 'rgba(245, 158, 11, 0.5)' }}></span>
-          Moderate (45–69)
+          Moderate (45-69)
         </div>
         <div className="legend-item">
           <span className="legend-swatch" style={{ background: 'rgba(239, 68, 68, 0.5)' }}></span>

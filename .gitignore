@@ -17,3 +17,35 @@ ENV/
 
 # VS Code
 .vscode/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Build output
+dist/
+frontend/dist/
+
+# Django media (user uploaded files)
+media/
+backend/media/
+
+# IDE / AI platform configs
+.omo/
+.opencode/
+.cursor/
+.windsurf/
+.codeium/
+.continue/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python eggs
+*.egg-info/
+
+# Environment overrides
+.env
+.env.local
+.env.production

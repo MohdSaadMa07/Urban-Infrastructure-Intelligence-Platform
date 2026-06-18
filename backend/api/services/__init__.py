@@ -10,9 +10,9 @@ Score components:
   - Resolution speed  (30%): faster is better
 
 Qualitative labels:
-  >= 70  → Good
-  >= 45  → Moderate
-  <  45  → Poor
+  >= 70  -> Good
+  >= 45  -> Moderate
+  <  45  -> Poor
 """
 
 
@@ -33,16 +33,16 @@ def compute_health_score(metrics):
 
     # --- Component 1: Closure rate (higher = better) ---
     closure_rate = closed / total
-    closure_score = closure_rate  # 0.0 – 1.0
+    closure_score = closure_rate  # 0.0 - 1.0
 
     # --- Component 2: Escalation rate (lower = better) ---
     escalation_rate = escalated / total
-    escalation_score = 1 - escalation_rate  # 0.0 – 1.0
+    escalation_score = 1 - escalation_rate  # 0.0 - 1.0
 
     # --- Component 3: Resolution speed (faster = better) ---
-    # Normalize: 1 day → ~1.0, 30 days → ~0.5, 90 days → ~0.25
+    # Normalize: 1 day -> ~1.0, 30 days -> ~0.5, 90 days -> ~0.25
     # Using a decay function: 15 / (avg_days + 15)
-    resolution_score = 15.0 / (avg_days + 15.0)  # 0.0 – 1.0
+    resolution_score = 15.0 / (avg_days + 15.0)  # 0.0 - 1.0
 
     # --- Weighted sum ---
     WEIGHT_CLOSURE = 0.40

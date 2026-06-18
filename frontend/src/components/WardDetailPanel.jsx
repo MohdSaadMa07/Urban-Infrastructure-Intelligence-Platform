@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 const WardDetailPanel = ({ ward, onClose }) => {
   if (!ward) return null;
@@ -17,8 +17,7 @@ const WardDetailPanel = ({ ward, onClose }) => {
     <>
       <div className="panel-overlay" onClick={onClose}></div>
       <div className="ward-panel">
-        <button className="panel-close" onClick={onClose}>✕</button>
-
+        <button className="panel-close" onClick={onClose}>&times;</button>
         {/* Header */}
         <div className="panel-header">
           <div className="panel-ward-name">Ward {ward_name}</div>
@@ -29,7 +28,7 @@ const WardDetailPanel = ({ ward, onClose }) => {
         <div className="panel-score-section">
           <div className={`panel-score-ring panel-score-${labelClass}`}>
             <span className="panel-score-value">
-              {health_score != null ? Math.round(health_score) : '—'}
+              {health_score != null ? Math.round(health_score) : '--'}
             </span>
           </div>
           <div className={`panel-score-label health-badge-${labelClass}`}>
@@ -57,6 +56,14 @@ const WardDetailPanel = ({ ward, onClose }) => {
             <div className="panel-metric-row">
               <span className="metric-name">Deliberations</span>
               <span className="metric-value">{metrics.total_deliberations?.toLocaleString()}</span>
+            </div>
+            <div className="panel-metric-row">
+              <span className="metric-name">Per Capita Deliberations</span>
+              <span className="metric-value">{metrics.per_capita_deliberations?.toLocaleString()}</span>
+            </div>
+            <div className="panel-metric-row">
+              <span className="metric-name">Avg Councillors</span>
+              <span className="metric-value">{metrics.avg_councillors ?? '--'}</span>
             </div>
             <div className="panel-metric-row">
               <span className="metric-name">Closed Complaints</span>

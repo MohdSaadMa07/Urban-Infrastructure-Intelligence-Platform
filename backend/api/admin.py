@@ -1,5 +1,21 @@
 from django.contrib import admin
-from .models import Ward, CivicMetrics, Complaint
+from django.contrib.auth.models import User
+from django.contrib.auth.admin import UserAdmin
+from .models import Ward, CivicMetrics, Complaint, UserProfile
+
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+
+class CustomUserAdmin(UserAdmin):
+    inlines = [UserProfileInline]
+    list_display = ('username', 'email', 'get_role', 'is_staff')
+    def get_role(self, obj):
+        return obj.profile.role if hasattr(obj, 'profile') else '-'
+    get_role.short_description = 'Role'
+
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)
 
 @admin.register(Ward)
 class WardAdmin(admin.ModelAdmin):

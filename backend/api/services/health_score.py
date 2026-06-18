@@ -10,12 +10,12 @@ Score components (sourced from ward_complaints.csv via CivicMetrics):
   - Per-capita deliberations (30%): higher = better civic engagement
 
 Each component is normalized with a sigmoid / decay function tuned to
-the observed data ranges so scores spread meaningfully (≈ 20-95).
+the observed data ranges so scores spread meaningfully (~ 20-95).
 
 Qualitative labels:
-  >= 70  → Good
-  >= 45  → Moderate
-  <  45  → Poor
+  >= 70  -> Good
+  >= 45  -> Moderate
+  <  45  -> Poor
 """
 
 import math
@@ -46,28 +46,28 @@ def compute_health_score(metrics):
 
     Returns:
         dict with keys:
-          score     – float, 0-100
-          label     – str, one of 'Good', 'Moderate', 'Poor'
-          breakdown – dict of per-component raw values and normalised scores
+          score     - float, 0-100
+          label     - str, one of 'Good', 'Moderate', 'Poor'
+          breakdown - dict of per-component raw values and normalised scores
     """
     complaints = getattr(metrics, 'per_capita_complaints', None) or 0
     avg_days = getattr(metrics, 'avg_resolution_days', None) or 0
     deliberations = getattr(metrics, 'per_capita_deliberations', None) or 0
 
     # --- Component 1: Per-capita complaints (lower = better) ---
-    # Data range: ~2 761 – 10 298.  Midpoint 6 500, steepness 0.0008.
-    # 2 761 → ~0.95,  6 500 → 0.50,  10 298 → ~0.05
+    # Data range: ~2 761 - 10 298.  Midpoint 6 500, steepness 0.0008.
+    # 2 761 -> ~0.95,  6 500 -> 0.50,  10 298 -> ~0.05
     complaint_score = _sigmoid(complaints, midpoint=6500, steepness=0.0008)
 
     # --- Component 2: Avg resolution days (lower = better) ---
-    # Data range: ~19 – 68.  Midpoint 40, steepness 0.12.
-    # 19 → ~0.93,  40 → 0.50,  68 → ~0.03
+    # Data range: ~19 - 68.  Midpoint 40, steepness 0.12.
+    # 19 -> ~0.93,  40 -> 0.50,  68 -> ~0.03
     resolution_score = _sigmoid(avg_days, midpoint=40, steepness=0.12)
 
     # --- Component 3: Per-capita deliberations (higher = better) ---
-    # Data range: ~24 – 95.  Midpoint 55, steepness 0.10.
-    # Inverted: higher deliberation → higher score.
-    # 95 → ~0.98,  55 → 0.50,  24 → ~0.04
+    # Data range: ~24 - 95.  Midpoint 55, steepness 0.10.
+    # Inverted: higher deliberation -> higher score.
+    # 95 -> ~0.98,  55 -> 0.50,  24 -> ~0.04
     deliberation_score = _sigmoid(deliberations, midpoint=55, steepness=-0.10)
 
     # --- Weighted sum ---
