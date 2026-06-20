@@ -30,7 +30,6 @@ frontend/dist/
 media/
 backend/media/
 
-# IDE / AI platform configs
 .omo/
 .opencode/
 .cursor/

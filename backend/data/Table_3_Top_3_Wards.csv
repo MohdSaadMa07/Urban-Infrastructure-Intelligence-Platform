@@ -1,0 +1,13 @@
+MainIssue,SubIssue,Rank1_Ward,Rank1_Value,Rank2_Ward,Rank2_Value,Rank3_Ward,Rank3_Value
+Drainage,"Drainage Chokes and Blockages",B,2184,H/W,5077,K/W,10554
+Drainage,Overflowing drains of manholes,B,1513,D,3515,C,1406
+Drainage,Replacement of Missing/ Damaged Manhole,B,280,H/W,617,K/W,1264
+Road,"Bad Patches/ Potholes on the Roads",B,3069,A,3846,D,5671
+Road,"Municipal Land - Road/ Footpath/ SWD",B,950,A,861,C,838
+Road,"Resurfacing of Road",D,964,B,334,A,389
+Solid Waste Management,"Garbage not lifted from house/gully/road/ authorised collection point/ municipal market",C,2675,B,1172,D,2509
+Solid Waste Management,"Removal of Debris",C,554,D,950,B,309
+Solid Waste Management,"Lifting of Tree Cutting",H/W,828,D,525,R/C,800
+Water Supply,Shortage of Water Supply,M/E,5167,C,981,B,539
+Water Supply,Leaks in Water Lines,N,2471,M/W,1495,K/E,2778
+Water Supply,Contaminated Water Supply,C,785,B,446,E,768

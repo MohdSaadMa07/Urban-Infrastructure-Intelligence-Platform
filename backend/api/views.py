@@ -1,4 +1,4 @@
-﻿from django.shortcuts import render
+from django.shortcuts import render
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -238,6 +238,13 @@ def councillors(request):
     """
     year_filter = request.GET.get('year')
 
+    if not year_filter:
+        from django.db.models import Max
+        # Default to the latest year with active deliberations/councillors (since 2024-2026 has no elected councillors)
+        active_year = CivicMetrics.objects.filter(total_deliberations__gt=0).aggregate(Max('year'))['year__max']
+        if active_year:
+            year_filter = active_year
+
     wards = Ward.objects.all()
     results = []
 
@@ -313,6 +320,130 @@ def councillor_ward_dashboard(request):
         for c in qs
     ]
 
+    # Fetch the latest ML prediction for this ward
+    latest_prediction = ward.predictions.order_by('-prediction_date').first()
+    prediction_data = None
+    if latest_prediction:
+        prediction_data = {
+            'prediction_date': latest_prediction.prediction_date.isoformat(),
+            'predicted_risk': latest_prediction.predicted_risk,
+            'predicted_complaints': latest_prediction.predicted_complaints,
+            'predicted_health_score': latest_prediction.predicted_health_score,
+            'recommendation': latest_prediction.recommendation,
+            'model_version': latest_prediction.model_version,
+        }
+
+    # Fetch focus facility insights using ML ward_insights
+    from ml.ward_insights import compute_ward_category_scores
+    db_categories = set(ward.complaints.values_list('category', flat=True))
+    mapping = {
+        'pothole': 'Roads',
+        'road': 'Roads',
+        'water': 'Water Supply',
+        'drainage': 'Drainage',
+        'garbage': 'Solid Waste Management',
+    }
+    ward_category_names = {mapping.get(c, c) for c in db_categories}
+    category_scores = compute_ward_category_scores(ward.ward_name, ward_category_names)
+    
+    focus_facility = None
+    if category_scores:
+        top_facility = category_scores[0]
+        display_names = {
+            'Roads': 'Roads & Potholes',
+            'Water Supply': 'Water Supply',
+            'Drainage': 'Drainage & Sewerage',
+            'Solid Waste Management': 'Garbage & Solid Waste',
+            'Buildings': 'Buildings & Factories',
+            'Pest control': 'Pest Control',
+            'Garden': 'Gardens & Open Spaces',
+            'Storm Water Drainage': 'Storm Water Drainage',
+        }
+        focus_facility = {
+            'category': top_facility['category'],
+            'display_name': display_names.get(top_facility['category'], top_facility['category']),
+            'score': top_facility['score'],
+            'growth_rate': top_facility['growth_rate'],
+            'escalation_rate': top_facility['escalation_rate'],
+        }
+
+    # 1. Compute major categories from ward's complaints
+    from django.db.models import Count
+    complaints_by_cat = ward.complaints.values('category').annotate(count=Count('id')).order_by('-count')
+    total_db_count = sum(c['count'] for c in complaints_by_cat)
+    
+    major_categories = []
+    category_choices_dict = dict(Complaint.CATEGORY_CHOICES)
+    for c in complaints_by_cat:
+        cat_code = c['category']
+        cat_display = category_choices_dict.get(cat_code, cat_code)
+        pct = round(c['count'] / total_db_count * 100, 1) if total_db_count > 0 else 0
+        major_categories.append({
+            'category_display': cat_display,
+            'count': c['count'],
+            'percentage': pct,
+            'trend': 'stable',
+        })
+
+    # 2. Compute failing categories using city-wide growth patterns from ml.anomaly
+    from ml.anomaly import detect_category_anomalies
+    try:
+        cat_anom = detect_category_anomalies()
+    except Exception:
+        cat_anom = []
+        
+    failing_categories = []
+    for c in cat_anom:
+        failing_categories.append({
+            'issue': c['issue'],
+            'recent_3yr_growth_pct': c['recent_3yr_growth_pct'],
+            'projected_next': int(c['latest'] * (1 + c['recent_3yr_growth_pct'] / 100)) if c['recent_3yr_growth_pct'] > 0 else c['latest']
+        })
+    failing_categories.sort(key=lambda x: x['recent_3yr_growth_pct'], reverse=True)
+
+    # 3. Construct input structures for the briefing generator
+    dashboard_briefing_input = {
+        'ward': {'ward_name': ward.ward_name},
+        'health_score': health['score'] if health else None,
+        'total_complaints': len(complaints),
+        'resolved_complaints': sum(1 for c in qs if c.status == 'resolved'),
+        'failing_categories': failing_categories,
+    }
+    
+    prediction_briefing_input = {
+        'predicted_risk': latest_prediction.predicted_risk if latest_prediction else 'unknown',
+        'predicted_complaints': latest_prediction.predicted_complaints if latest_prediction else None,
+        'predicted_health_score': latest_prediction.predicted_health_score if latest_prediction else None,
+        'recommendation': latest_prediction.recommendation if latest_prediction else None,
+    }
+    
+    insights_briefing_input = {
+        'major_categories': major_categories,
+        'failing_categories': failing_categories,
+    }
+
+    # 4. Generate the briefing
+    from ml.briefing import generate_ward_briefing
+    try:
+        briefing_data = generate_ward_briefing(
+            dashboard=dashboard_briefing_input,
+            prediction=prediction_briefing_input,
+            insights=insights_briefing_input,
+            ward_name=ward.ward_name
+        )
+    except Exception as e:
+        briefing_data = {
+            'error': f'Could not generate briefing: {str(e)}',
+            'sections': {
+                'header': f'Ward {ward.ward_name}',
+                'whats_happening': 'Error generating what\'s happening section.',
+                'forecast': 'Error generating forecast section.',
+                'action_items': []
+            },
+            'summary': f'Ward {ward.ward_name} · Briefing unavailable',
+            'raw': {}
+        }
+
     return Response({
         'ward': ward_info,
         'health_score': health['score'] if health else None,
@@ -324,6 +455,9 @@ def councillor_ward_dashboard(request):
         'in_progress_complaints': sum(1 for c in qs if c.status == 'in_progress'),
         'resolved_complaints': sum(1 for c in qs if c.status == 'resolved'),
         'complaints': complaints,
+        'predictions': prediction_data,
+        'focus_facility': focus_facility,
+        'briefing': briefing_data,
     })
 
 @api_view(['GET'])

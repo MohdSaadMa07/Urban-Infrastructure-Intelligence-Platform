@@ -81,3 +81,27 @@ class Complaint(models.Model):
 
     def __str__(self):
         return f"{self.get_category_display()} - Ward {self.ward.ward_name}"
+
+
+class WardPrediction(models.Model):
+    RISK_CHOICES = [
+        ('low', 'Low Risk'),
+        ('medium', 'Medium Risk'),
+        ('high', 'High Risk'),
+    ]
+    ward = models.ForeignKey(Ward, on_delete=models.CASCADE, related_name='predictions')
+    prediction_date = models.DateField(auto_now_add=True)
+    predicted_risk = models.CharField(max_length=20, choices=RISK_CHOICES)
+    predicted_complaints = models.IntegerField()
+    predicted_health_score = models.FloatField(null=True, blank=True)
+    recommendation = models.TextField(blank=True)
+    model_version = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Ward Prediction'
+        verbose_name_plural = 'Ward Predictions'
+        ordering = ['-prediction_date']
+
+    def __str__(self):
+        return f"{self.ward.ward_name} - {self.prediction_date} ({self.predicted_risk})"

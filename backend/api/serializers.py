@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from api.models import UserProfile, Ward
+from api.models import UserProfile, Ward, WardPrediction
 
 
 class WardSerializer(serializers.ModelSerializer):
@@ -87,3 +87,9 @@ class LoginSerializer(serializers.Serializer):
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField()
     new_password = serializers.CharField(min_length=6)
+
+
+class WardPredictionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WardPrediction
+        fields = '__all__'
