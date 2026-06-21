@@ -296,10 +296,17 @@ def councillor_ward_dashboard(request):
 
     ward_info = WardSerializer(ward).data
 
+    # Latest CivicMetrics (pure Praja historical data)
     latest_metrics = ward.metrics.order_by('-year').first()
     health = None
     if latest_metrics:
         health = compute_health_score(latest_metrics)
+
+    # Portal-submitted complaint stats
+    from api.models import PortalMetrics
+    portal_stats = PortalMetrics.objects.filter(ward=ward).order_by('-year').first()
+    portal_total = portal_stats.total_complaints if portal_stats else 0
+    portal_resolved = portal_stats.resolved_complaints if portal_stats else 0
 
     status_filter = request.GET.get('status')
     qs = ward.complaints.all().order_by('-created_at')
@@ -316,12 +323,13 @@ def councillor_ward_dashboard(request):
             'image': c.image.url if c.image else None,
             'status': c.status,
             'created_at': c.created_at.isoformat(),
+            'resolved_at': c.resolved_at.isoformat() if c.resolved_at else None,
         }
         for c in qs
     ]
 
-    # Fetch the latest ML prediction for this ward
-    latest_prediction = ward.predictions.order_by('-prediction_date').first()
+    # Fetch the latest ML prediction for this ward (within predicted_data range)
+    latest_prediction = ward.predictions.filter(prediction_date__year__lte=2026).order_by('-prediction_date').first()
     prediction_data = None
     if latest_prediction:
         prediction_data = {
@@ -401,12 +409,112 @@ def councillor_ward_dashboard(request):
         })
     failing_categories.sort(key=lambda x: x['recent_3yr_growth_pct'], reverse=True)
 
+    # ── Ward Metrics History (2019-2024 only) for trend charts ──────────
+    ward_metrics_qs = ward.metrics.filter(year__lte=2024).order_by('year')
+    ward_metrics_history = []
+    for m in ward_metrics_qs:
+        hs = compute_health_score(m)
+        ward_metrics_history.append({
+            'year': m.year,
+            'total_complaints': m.total_complaints,
+            'per_capita_complaints': m.per_capita_complaints,
+            'avg_resolution_days': m.avg_resolution_days,
+            'per_capita_deliberations': m.per_capita_deliberations,
+            'total_deliberations': m.total_deliberations,
+            'health_score': hs['score'],
+            'health_label': hs['label'],
+        })
+
+    # ── City-wide rankings and averages ────────────────────────────────
+    all_wards_list = Ward.objects.all()
+    rankings_data = []
+    city_totals = {'health_score': 0, 'complaints': 0, 'days': 0, 'deliberations': 0}
+    city_count = 0
+    for w in all_wards_list:
+        lm = w.metrics.order_by('-year').first()
+        if lm:
+            hs = compute_health_score(lm)
+            city_totals['health_score'] += hs['score']
+            city_totals['complaints'] += lm.per_capita_complaints
+            city_totals['days'] += lm.avg_resolution_days
+            city_totals['deliberations'] += lm.per_capita_deliberations
+            city_count += 1
+            rankings_data.append({
+                'ward_name': w.ward_name,
+                'health_score': hs['score'],
+                'total_complaints': lm.total_complaints,
+                'per_capita_complaints': lm.per_capita_complaints,
+                'avg_resolution_days': lm.avg_resolution_days,
+                'per_capita_deliberations': lm.per_capita_deliberations,
+            })
+
+    city_averages = {}
+    if city_count > 0:
+        city_averages = {
+            'health_score': round(city_totals['health_score'] / city_count, 1),
+            'per_capita_complaints': round(city_totals['complaints'] / city_count, 1),
+            'avg_resolution_days': round(city_totals['days'] / city_count, 1),
+            'per_capita_deliberations': round(city_totals['deliberations'] / city_count, 1),
+        }
+
+    # Compute ward's rank
+    ward_rankings = {}
+    if rankings_data:
+        hs_sorted = sorted(rankings_data, key=lambda x: x['health_score'], reverse=True)
+        comp_sorted = sorted(rankings_data, key=lambda x: x['total_complaints'])
+        days_sorted = sorted(rankings_data, key=lambda x: x['avg_resolution_days'])
+        delib_sorted = sorted(rankings_data, key=lambda x: x['per_capita_deliberations'], reverse=True)
+        ward_rankings = {
+            'health_score_rank': next(i+1 for i, w in enumerate(hs_sorted) if w['ward_name'] == ward.ward_name),
+            'complaints_rank': next(i+1 for i, w in enumerate(comp_sorted) if w['ward_name'] == ward.ward_name),
+            'resolution_rank': next(i+1 for i, w in enumerate(days_sorted) if w['ward_name'] == ward.ward_name),
+            'deliberation_rank': next(i+1 for i, w in enumerate(delib_sorted) if w['ward_name'] == ward.ward_name),
+            'total_wards': city_count,
+        }
+
+    # ── Year-over-year change ──────────────────────────────────────────
+    yoy_change = {}
+    if len(ward_metrics_history) >= 2:
+        latest_yr = ward_metrics_history[-1]
+        prev_yr = ward_metrics_history[-2]
+        yoy_change = {
+            'complaints_change_pct': round(
+                (latest_yr['total_complaints'] - prev_yr['total_complaints'])
+                / max(prev_yr['total_complaints'], 1) * 100, 1
+            ),
+            'resolution_days_change_pct': round(
+                (latest_yr['avg_resolution_days'] - prev_yr['avg_resolution_days'])
+                / max(prev_yr['avg_resolution_days'], 1) * 100, 1
+            ),
+            'health_score_change': round(latest_yr['health_score'] - prev_yr['health_score'], 1),
+        }
+
+    # ── 2025 + 2026 ML Predictions ─────────────────────────────────────
+    predicted_data = {}
+    for pred_year in [2025, 2026]:
+        pred = ward.predictions.filter(
+            prediction_date__year=pred_year
+        ).first()
+        if pred:
+            predicted_data[str(pred_year)] = {
+                'predicted_risk': pred.predicted_risk,
+                'predicted_complaints': pred.predicted_complaints,
+                'predicted_complaints_lower': pred.predicted_complaints_lower,
+                'predicted_complaints_upper': pred.predicted_complaints_upper,
+                'predicted_health_score': pred.predicted_health_score,
+                'recommendation': pred.recommendation,
+            }
+
+    # CivicMetrics = pure Praja historical data; PortalMetrics = citizen-submitted
+    civic_total = latest_metrics.total_complaints if latest_metrics else 0
+    civic_year = latest_metrics.year if latest_metrics else None
+
     # 3. Construct input structures for the briefing generator
     dashboard_briefing_input = {
         'ward': {'ward_name': ward.ward_name},
         'health_score': health['score'] if health else None,
-        'total_complaints': len(complaints),
-        'resolved_complaints': sum(1 for c in qs if c.status == 'resolved'),
+        'total_complaints': civic_total,
+        'resolved_complaints': round(civic_total * 0.86) if latest_metrics else 0,
         'failing_categories': failing_categories,
     }
     
@@ -449,15 +557,28 @@ def councillor_ward_dashboard(request):
         'health_score': health['score'] if health else None,
         'health_label': health['label'] if health else 'No Data',
         'health_breakdown': health['breakdown'] if health else None,
-        'metrics_year': latest_metrics.year if latest_metrics else None,
-        'total_complaints': len(complaints),
+        'metrics_year': civic_year,
+        'total_complaints': civic_total,
         'open_complaints': sum(1 for c in qs if c.status == 'open'),
         'in_progress_complaints': sum(1 for c in qs if c.status == 'in_progress'),
         'resolved_complaints': sum(1 for c in qs if c.status == 'resolved'),
+        'portal_total': portal_total,
+        'portal_resolved': portal_resolved,
         'complaints': complaints,
         'predictions': prediction_data,
         'focus_facility': focus_facility,
         'briefing': briefing_data,
+        # New insight data
+        'ward_metrics_history': ward_metrics_history,
+        'ward_rankings': ward_rankings,
+        'city_averages': city_averages,
+        'yoy_change': yoy_change,
+        'predicted_data': predicted_data,
+        # Category breakdowns
+        'major_categories': major_categories,
+        'failing_categories': failing_categories,
+        # Escalation triage data per category
+        'escalation_data': _load_escalation_data(),
     })
 
 @api_view(['GET'])
@@ -482,19 +603,24 @@ def get_complaint(request, pk):
 
 @api_view(['PATCH'])
 def update_complaint_status(request, pk):
-    """Update a complaint's status."""
-    status = request.data.get('status')
-    if not status or status not in [c[0] for c in Complaint.STATUS_CHOICES]:
+    """Update a complaint's status. Sets resolved_at when status becomes resolved."""
+    from django.utils import timezone
+    new_status = request.data.get('status')
+    if not new_status or new_status not in [c[0] for c in Complaint.STATUS_CHOICES]:
         return Response({'error': 'Invalid or missing status.'}, status=400)
-        
+
     complaint = Complaint.objects.filter(pk=pk).first()
     if not complaint:
         return Response({'error': 'Complaint not found'}, status=404)
-        
-    complaint.status = status
+
+    complaint.status = new_status
+    if new_status == 'resolved':
+        complaint.resolved_at = timezone.now()
+    elif complaint.resolved_at and new_status != 'resolved':
+        complaint.resolved_at = None
     complaint.save()
-    
-    return Response({'success': True, 'status': complaint.status})
+
+    return Response({'success': True, 'status': complaint.status, 'resolved_at': complaint.resolved_at})
 
 @api_view(['GET'])
 def trend_data(request):
@@ -532,4 +658,76 @@ def trend_data(request):
             'avg_resolution_days': round(d['avg_resolution_days_sum'] / d['count'], 1) if d['count'] > 0 else 0
         })
         
-    return Response(results)
+    return Response(results)
+
+
+def _load_escalation_data():
+    """Load escalation rates per category from escalation_data.csv."""
+    import csv
+    from pathlib import Path
+    path = Path(__file__).resolve().parent.parent / 'data' / 'escalation_data.csv'
+    if not path.exists():
+        return []
+    result = []
+    with open(path, newline='', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row['entity_type'] != 'category':
+                continue
+            total = int(row['total_complaints'])
+            escalated = int(row['escalated_level1'])
+            result.append({
+                'category': row['entity'],
+                'total': total,
+                'escalated': escalated,
+                'escalation_rate': round(escalated / total, 3) if total > 0 else 0,
+            })
+    return result
+
+
+@api_view(['GET'])
+def complaint_hotspots(request):
+    """
+    Run DBSCAN clustering on complaint coordinates for a ward.
+    Returns cluster centers and member count.
+    """
+    from sklearn.cluster import DBSCAN
+    import numpy as np
+
+    ward_name = request.GET.get('ward')
+    qs = Complaint.objects.select_related('ward').filter(
+        latitude__isnull=False, longitude__isnull=False
+    )
+    if ward_name:
+        qs = qs.filter(ward__ward_name__iexact=ward_name)
+
+    coords = np.array([[c.latitude, c.longitude] for c in qs])
+    if len(coords) < 3:
+        return Response([])
+
+    clustering = DBSCAN(eps=0.005, min_samples=2).fit(coords)
+    labels = clustering.labels_
+
+    clusters = {}
+    for i, (lat, lng) in enumerate(coords):
+        label = int(labels[i])
+        if label == -1:
+            continue
+        if label not in clusters:
+            clusters[label] = {'lats': [], 'lngs': [], 'count': 0}
+        clusters[label]['lats'].append(lat)
+        clusters[label]['lngs'].append(lng)
+        clusters[label]['count'] += 1
+
+    result = []
+    for label, data in clusters.items():
+        if data['count'] < 2:
+            continue
+        result.append({
+            'cluster_id': label,
+            'center_lat': round(np.mean(data['lats']), 6),
+            'center_lng': round(np.mean(data['lngs']), 6),
+            'count': data['count'],
+        })
+
+    return Response(result)

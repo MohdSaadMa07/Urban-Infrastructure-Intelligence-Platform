@@ -1,70 +1,39 @@
 """
-Ward briefing generator.
-
-Produces structured, plain-English ward summaries from:
-  - Dashboard data (stats, health score)
-  - Predictions (risk, forecast, recommendation)
-  - Insights (major categories, failing categories)
-  - Anomaly detection results
-
-Template-based generation — no external LLM API required.
-Swappable for LLM-powered generation later (just replace _generate_text).
+Ward briefing generator — plain, simple English for non-technical users.
+Template-based, no external LLM API required.
 """
 
 from datetime import date
 from .anomaly import get_ward_anomaly_report
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────
-
-
 def _health_label(score):
-    if score is None:
-        return 'unavailable'
-    if score >= 70:
-        return 'good'
-    if score >= 45:
-        return 'moderate'
+    if score is None: return 'unavailable'
+    if score >= 70: return 'good'
+    if score >= 45: return 'moderate'
     return 'poor'
 
 
 def _health_emoji(score):
-    if score is None:
-        return '-'
-    if score >= 70:
-        return 'healthy'
-    if score >= 45:
-        return 'needs attention'
+    if score is None: return '-'
+    if score >= 70: return 'healthy'
+    if score >= 45: return 'needs attention'
     return 'critical'
 
 
 def _trend_phrase(growth):
-    if growth is None:
-        return 'stable'
-    if growth > 10:
-        return 'sharply rising'
-    if growth > 5:
-        return 'rising'
-    if growth < -10:
-        return 'sharply falling'
-    if growth < -5:
-        return 'falling'
+    if growth is None: return 'stable'
+    if growth > 10: return 'rapidly rising'
+    if growth > 5: return 'rising'
+    if growth < -10: return 'rapidly falling'
+    if growth < -5: return 'falling'
     return 'stable'
 
 
-def _ordinal(n):
-    if n is None:
-        return ''
-    return f"{n}{'th' if 11 <= n <= 13 else {1:'st',2:'nd',3:'rd'}.get(n%10, 'th')}"
-
-
-# ── Section builders ────────────────────────────────────────────────────
-
-
 def _build_header(dashboard):
-    """Ward identification + health summary."""
+    """Simple ward identification + health summary."""
     if not dashboard:
-        return "No dashboard data available."
+        return "No data available for this ward."
 
     ward = dashboard.get('ward', {})
     ward_name = ward.get('ward_name', 'Unknown')
@@ -72,207 +41,168 @@ def _build_header(dashboard):
     label = _health_label(health)
     emoji = _health_emoji(health)
 
-    parts = [
-        f"Ward {ward_name} — {date.today().strftime('%B %d, %Y')}",
-        f"Health score: {round(health) if health else 'N/A'}/100 ({label}).",
-    ]
-
     total = dashboard.get('total_complaints', 0)
     resolved = dashboard.get('resolved_complaints', 0)
     resolution_rate = round(resolved / total * 100, 1) if total > 0 else 0
 
-    parts.append(
-        f"{total} total complaints, {resolved} resolved "
-        f"({resolution_rate}% resolution rate)."
-    )
-
-    return '\n'.join(parts)
+    lines = [
+        f"Ward {ward_name} has a health score of {round(health) if health else 'N/A'} out of 100 — this means it is {emoji}.",
+        f"There are {total} complaints in total. Of these, {resolved} complaints have been resolved ({resolution_rate}% resolution rate).",
+    ]
+    return '\n'.join(lines)
 
 
 def _build_whats_happening(dashboard, insights, anomaly_report):
-    """
-    Key issues: top complaint categories, anomalies, trend breaks.
-    """
+    """Key issues in simple language."""
     parts = []
 
-    # Top DB categories
     major = (insights or {}).get('major_categories', [])
     if major:
         top = major[0]
+        trend = top.get('trend', 'stable')
         parts.append(
-            f"Top issue: {top['category_display']} — {top['count']} cases "
-            f"({top['percentage']}% of all complaints), trend is {top.get('trend', 'stable')}."
+            f"Most complaints are about '{top['category_display']}' — {top['count']} cases "
+            f"({top['percentage']}% of all complaints). This is {trend}."
         )
         if len(major) > 1:
             others = ', '.join(f"{c['category_display']} ({c['count']})" for c in major[1:4])
             parts.append(f"Other major categories: {others}.")
 
-    # City-wide category anomalies from CSV
     if anomaly_report:
         cat_anomalies = anomaly_report.get('category_anomalies', [])
         for a in cat_anomalies[:3]:
-            if a['direction'] == 'high':
-                parts.append(
-                    f"{a['issue']} is running {a['pct_above_mean']:+.1f}% above its "
-                    f"historical average ({a['latest']:,} vs {a['mean']:.0f} avg) — "
-                    f"{a['severity'].upper()} anomaly."
-                )
-            else:
-                parts.append(
-                    f"{a['issue']} is running {a['pct_above_mean']:+.1f}% below its "
-                    f"historical average."
-                )
-
-        # Trend breaks
-        trend_breaks = anomaly_report.get('trend_breaks', [])
-        for t in trend_breaks[:2]:
+            direction = 'increased' if a['direction'] == 'high' else 'decreased'
+            severity = 'very high' if a['severity'] == 'critical' else 'moderately high' if a['severity'] == 'major' else 'slight'
             parts.append(
-                f"{t['issue']} has seen a {t['direction']} in the last 3 years "
-                f"({t['recent_mean']:.0f}/yr vs {t['early_mean']:.0f}/yr historically) — "
-                f"{t['severity']} shift."
+                f"'{a['issue']}' complaints have {direction} by {a['pct_above_mean']:+.1f}% compared to last year "
+                f"({a['latest']:,} now vs {a['mean']:.0f} average). This is a {severity} change."
             )
 
-        # Ward-level anomaly
+        trend_breaks = anomaly_report.get('trend_breaks', [])
+        for t in trend_breaks[:2]:
+            direction = 'upsurge' if 'upsurge' in t.get('direction', '') else 'downfall'
+            severity = 'major' if t.get('severity') == 'critical' else 'minor'
+            parts.append(
+                f"Over the last 3 years, '{t['issue']}' has seen a {severity} {direction} "
+                f"({t['recent_mean']:.0f}/year now vs {t['early_mean']:.0f}/year before)."
+            )
+
         ward_anom = anomaly_report.get('ward_anomaly')
         if ward_anom and ward_anom.get('is_anomaly'):
             parts.append(
-                f"Ward complaint volume ({ward_anom['latest_total']:,}) is "
-                f"{'above' if ward_anom['direction'] == 'high' else 'below'} "
-                f"normal range ({ward_anom['pct_above_mean']:+.1f}% vs "
-                f"{ward_anom['mean']:.0f} historical mean)."
+                f"Complaint volume in your ward ({ward_anom['latest_total']:,}) is "
+                f"{'above normal' if ward_anom['direction'] == 'high' else 'below normal'} "
+                f"({ward_anom['pct_above_mean']:+.1f}% vs the historical average)."
             )
 
-    # Failing categories
     failing = (insights or {}).get('failing_categories', [])
     if failing:
         worst = failing[0]
+        trend = _trend_phrase(worst.get('recent_3yr_growth_pct'))
         parts.append(
-            f"Most at-risk category: {worst['issue']} — growing at "
-            f"{worst.get('recent_3yr_growth_pct', 0):+.1f}%/yr, "
-            f"projected {worst.get('projected_next', 0):,} complaints next year."
+            f"Most at-risk category: '{worst['issue']}' — this is {trend} "
+            f"({worst.get('recent_3yr_growth_pct', 0):+.1f}% each year). "
+            f"Next year it may reach {worst.get('projected_next', 0):,} complaints."
         )
 
-    return '\n'.join(parts) if parts else "No significant activity to report."
+    if not parts:
+        parts.append("No significant activity to report. Everything is normal.")
+
+    return '\n'.join(parts)
 
 
 def _build_forecast(dashboard, prediction):
-    """Prediction summary + recommendation."""
+    """Prediction summary in simple language."""
     if not prediction:
-        return "No forecast data available."
+        return "Next year's forecast is not available yet."
 
     risk = prediction.get('predicted_risk', 'unknown')
-    forecast = prediction.get('predicted_complaints')
+    forecast_count = prediction.get('predicted_complaints')
     health = prediction.get('predicted_health_score')
     current_health = dashboard.get('health_score')
     rec = prediction.get('recommendation')
 
-    parts = [
-        f"Risk classification: {risk.upper()}."
-    ]
+    risk_labels = {'high': 'High Risk — needs attention', 'medium': 'Medium Risk — keep watch', 'low': 'Low Risk — good shape'}
+    parts = [f"Next year's risk level: {risk_labels.get(risk, 'Unknown')}."]
 
-    if forecast is not None:
-        parts.append(f"Forecast: {forecast:,} complaints expected next period.")
+    if forecast_count is not None:
+        parts.append(f"We expect about {forecast_count:,} complaints next year.")
 
     if health is not None:
-        direction = ''
+        diff_text = ''
         if current_health:
             diff = round(health - current_health)
             if diff > 0:
-                direction = f" ({diff:+.0f} vs current)"
+                diff_text = f" ({diff} points better than today)"
             elif diff < 0:
-                direction = f" ({diff:+.0f} vs current)"
-        parts.append(f"Predicted health score: {round(health)}/100{direction}.")
+                diff_text = f" ({abs(diff)} points worse than today)"
+        parts.append(f"Predicted health score: {round(health)}/100{diff_text}.")
 
     if rec:
-        parts.append(f"Recommendation: {rec}")
+        parts.append(f"Suggestion: {rec}")
 
     return '\n'.join(parts)
 
 
 def _build_action_items(dashboard, prediction, anomaly_report):
-    """Concrete action items extracted from all data sources."""
+    """Concrete action items in simple English."""
     items = []
     dashboard = dashboard or {}
 
-    # Health-based action
     health = dashboard.get('health_score')
     if health is not None and health < 45:
-        items.append(f"Health score is critical ({round(health)}). Investigate root causes and allocate resources.")
+        items.append(f"Health score is very low ({round(health)}). Investigate causes and arrange resources immediately.")
     elif health is not None and health < 70:
-        items.append(f"Health score is moderate ({round(health)}). Focus on improving resolution rates.")
+        items.append(f"Health score needs improvement ({round(health)}). Focus on resolving complaints faster.")
 
-    # Failing categories
     failing = (dashboard or {}).get('failing_categories', [])
     if failing:
-        items.append(f"Address rising complaints in {failing[0].get('issue', 'top category')} — projected growth is significant.")
+        items.append(f"Complaints are rising fast in '{failing[0].get('issue', 'top category')}'. Pay attention to this area.")
 
-    # Anomaly-driven actions
     if anomaly_report:
         for a in anomaly_report.get('category_anomalies', [])[:2]:
             if a['severity'] in ('critical', 'major') and a['direction'] == 'high':
-                items.append(f"Investigate spike in {a['issue']}: {a['latest']:,} complaints vs {a['mean']:.0f} average.")
+                items.append(f"Spike in '{a['issue']}' complaints — {a['latest']:,} complaints vs {a['mean']:.0f} average. Take immediate action.")
 
         for t in anomaly_report.get('trend_breaks', [])[:1]:
             if t['severity'] in ('critical', 'major'):
-                items.append(f"Sudden {t['direction']} in {t['issue']} over last 3 years — review operational changes.")
+                direction = 'upsurge' if 'upsurge' in t.get('direction', '') else 'downfall'
+                items.append(f"Major shift in '{t['issue']}' over the last 3 years ({direction}). Review what has changed.")
 
-    # Prediction-driven action
     if prediction:
         risk = prediction.get('predicted_risk')
-        if risk in ('high', 'medium'):
-            items.append(f"{'High' if risk == 'high' else 'Medium'} risk forecast — consider preemptive measures.")
+        if risk == 'high':
+            items.append("High risk forecast for next year. Start preparing now.")
+        elif risk == 'medium':
+            items.append("Medium risk forecast for next year. Keep monitoring closely.")
 
     if not items:
-        items.append("No urgent actions identified. Continue monitoring.")
+        items.append("Everything looks normal. No urgent action needed.")
 
     return items
 
 
-# ── Main briefing ───────────────────────────────────────────────────────
-
-
 def generate_ward_briefing(dashboard=None, prediction=None, insights=None, ward_name=None):
-    """
-    Generate a complete ward briefing from all available data sources.
-
-    Accepts the same data structures returned by the API views:
-      - dashboard: dict from /api/councillor/dashboard/
-      - prediction: dict from /api/predictions/?ward=XX (first item)
-      - insights: dict from /api/insights/?ward=XX
-      - ward_name: optional override
-
-    Returns dict with:
-      - ward: ward name
-      - generated_at: ISO date
-      - sections: { header, whats_happening, forecast, action_items }
-      - summary: one-line summary
-      - raw: { health_score, total_complaints, risk, forecast_count }
-    """
+    """Generate a complete ward briefing in simple English."""
     w = ward_name or (dashboard or {}).get('ward', {}).get('ward_name', 'Unknown')
 
-    # Fetch anomaly report
     anomaly_report = get_ward_anomaly_report(w)
 
-    # Build sections
     header = _build_header(dashboard)
     whats_happening = _build_whats_happening(dashboard, insights, anomaly_report)
     forecast = _build_forecast(dashboard, prediction)
     action_items = _build_action_items(dashboard, prediction, anomaly_report)
 
-    # One-line summary
     health = (dashboard or {}).get('health_score')
     total = (dashboard or {}).get('total_complaints', 0)
     risk = (prediction or {}).get('predicted_risk', 'unknown')
     anomaly_count = len(anomaly_report.get('category_anomalies', [])) if anomaly_report else 0
 
-    summary_parts = [
-        f"Ward {w}: {_health_emoji(health)} health ({_health_label(health)})",
-        f"{total} complaints",
-        f"{risk.upper()} risk"
-    ]
+    health_text = _health_emoji(health)
+    risk_labels = {'high': 'High Risk', 'medium': 'Medium Risk', 'low': 'Low Risk'}
+    summary = f"Ward {w}: Health is {health_text} · {total} complaints · {risk_labels.get(risk, 'Unknown Risk')}"
     if anomaly_count:
-        summary_parts.append(f"{anomaly_count} anomaly/ies detected")
-    summary = ' · '.join(summary_parts)
+        summary += f" · {anomaly_count} unusual pattern(s) detected"
 
     return {
         'ward': w,

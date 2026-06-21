@@ -14,6 +14,8 @@ CATEGORY_CSV = ML_DIR.parent / "data" / "Table_1_Issue_Wise_Overall_Complaints.c
 
 RISK_MODEL_PATH = MODELS_DIR / "risk_model.pkl"
 FORECAST_MODEL_PATH = MODELS_DIR / "forecast_model.pkl"
+FORECAST_LOWER_PATH = MODELS_DIR / "forecast_lower.pkl"
+FORECAST_UPPER_PATH = MODELS_DIR / "forecast_upper.pkl"
 CLUSTER_MODEL_PATH = MODELS_DIR / "cluster_model.pkl"
 SCALER_PATH = MODELS_DIR / "scaler.pkl"
 FEATURES_PATH = MODELS_DIR / "feature_columns.pkl"

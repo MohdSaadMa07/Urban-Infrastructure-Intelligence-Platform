@@ -4,7 +4,7 @@ from .views import (
     home, identify_ward, wards_geojson, health_scores,
     submit_complaint, list_complaints, councillors,
     get_complaint, update_complaint_status, trend_data,
-    councillor_ward_dashboard,
+    councillor_ward_dashboard, complaint_hotspots,
 )
 from .auth_views import register, login_view, profile, logout_view
 from .models import Ward
@@ -30,6 +30,7 @@ urlpatterns = [
     path('complaints/<int:pk>/status/', update_complaint_status, name='update-complaint-status'),
     path('councillors/', councillors, name='councillors'),
     path('trends/', trend_data, name='trend-data'),
+    path('hotspots/', complaint_hotspots, name='complaint-hotspots'),
     path('wards/', wards_list, name='wards-list'),
     path('councillor/dashboard/', councillor_ward_dashboard, name='councillor-dashboard'),
     path('auth/register/', register, name='auth-register'),

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.contrib.auth.admin import UserAdmin
-from .models import Ward, CivicMetrics, Complaint, UserProfile
+from .models import Ward, CivicMetrics, PortalMetrics, Complaint, UserProfile
 
 class UserProfileInline(admin.StackedInline):
     model = UserProfile
@@ -29,6 +29,11 @@ class CivicMetricsAdmin(admin.ModelAdmin):
                     'per_capita_complaints', 'total_deliberations')
     list_filter = ('year', 'ward')
     search_fields = ('ward__ward_name',)
+
+@admin.register(PortalMetrics)
+class PortalMetricsAdmin(admin.ModelAdmin):
+    list_display = ('ward', 'year', 'total_complaints', 'resolved_complaints')
+    list_filter = ('year', 'ward')
 
 @admin.register(Complaint)
 class ComplaintAdmin(admin.ModelAdmin):

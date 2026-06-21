@@ -1,10 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Hexagon, LogOut, Filter, AlertCircle, CheckCircle, Clock,
-  MapPin, BarChart3, TrendingUp, RefreshCw, Sparkles, ListTodo, FileText
+  MapPin, BarChart3, TrendingUp, RefreshCw, Sparkles, ListTodo, FileText,
+  ArrowUp, ArrowDown, Minus, Award, Crosshair
 } from 'lucide-react';
+import {
+  RadialBarChart, RadialBar, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend,
+} from 'recharts';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../context/AuthContext';
+
+// DivIcon-based markers (no image path issues with bundlers)
+import L from 'leaflet';
+
+const CATEGORY_PIN_COLORS = {
+  'Garbage': '#f59e0b', 'Roads': '#ef4444', 'Water': '#3b82f6',
+  'Sewage': '#8b5cf6', 'Street Light': '#eab308', 'Drainage': '#06b6d4',
+  'Encroachment': '#ec4899', 'Other': '#64748b',
+};
+function createPinIcon(category) {
+  const fill = CATEGORY_PIN_COLORS[category] || '#64748b';
+  return L.divIcon({
+    className: '',
+    html: `<svg width="24" height="36" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24s12-15 12-24C24 5.373 18.627 0 12 0z" fill="${fill}" stroke="white" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="5" fill="white"/>
+    </svg>`,
+    iconSize: [24, 36],
+    iconAnchor: [12, 36],
+    popupAnchor: [0, -36],
+  });
+}
+
+const ESCALATION_COLORS = {
+  high: { bg: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '#ef4444' },
+  medium: { bg: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '#f59e0b' },
+  low: { bg: 'rgba(34,197,94,0.2)', color: '#22c55e', border: '#22c55e' },
+};
+
+const CATEGORY_DISPLAY_TO_KEY = {
+  'Potholes': 'Roads', 'Water Supply': 'Water Supply', 'Drainage': 'Drainage',
+  'Garbage': 'Solid Waste Management', 'Street Lights': 'Roads', 'Roads': 'Roads',
+};
 
 const STATUS_COLORS = {
   open: { bg: 'rgba(239,68,68,0.2)', color: '#f87171', border: '#ef4444' },
@@ -23,8 +63,7 @@ const CouncillorPortal = () => {
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [checkedActions, setCheckedActions] = useState({});
-  const [hoveredAction, setHoveredAction] = useState(null);
-  const [hoveredBriefCard, setHoveredBriefCard] = useState(null);
+  const [hotspots, setHotspots] = useState([]);
 
   const toggleAction = (idx) => {
     setCheckedActions(prev => ({
@@ -47,6 +86,13 @@ const CouncillorPortal = () => {
       }
       const data = await res.json();
       setDashboard(data);
+      // Fetch hotspots
+      try {
+        const hres = await fetch(`/api/hotspots/?ward=${data.ward.ward_name}`, {
+          headers: { Authorization: `Bearer ${getAccessToken()}` },
+        });
+        if (hres.ok) setHotspots(await hres.json());
+      } catch {}
     } catch (err) {
       setError(err.message);
     }
@@ -126,6 +172,36 @@ const CouncillorPortal = () => {
   }
 
   const d = dashboard;
+
+  /* Chart tooltips */
+  const ChartTooltip = ({ active, payload, label, unit }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, padding: '0.5rem 0.75rem', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+        <p style={{ color: '#94a3b8', fontSize: '0.72rem', margin: 0 }}>{label}</p>
+        {payload.map((entry, idx) => (
+          entry.value != null && (
+            <p key={idx} style={{ color: entry.color, fontSize: '0.85rem', fontWeight: 700, margin: '0.2rem 0 0' }}>
+              {entry.name}: {typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}{unit || ''}
+            </p>
+          )
+        ))}
+      </div>
+    );
+  };
+
+  const TrendArrow = ({ value }) => {
+    if (value == null) return <Minus size={14} color="#64748b" />;
+    if (value > 0) return <ArrowUp size={14} color="#ef4444" />;
+    if (value < 0) return <ArrowDown size={14} color="#22c55e" />;
+    return <Minus size={14} color="#64748b" />;
+  };
+
+  const scoreColor = (score) => {
+    if (score >= 70) return '#22c55e';
+    if (score >= 45) return '#f59e0b';
+    return '#ef4444';
+  };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#050a18' }}>
@@ -233,6 +309,248 @@ const CouncillorPortal = () => {
               ))}
             </div>
 
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* SECTION 1: Health Score Gauge + Ward Rankings */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              {/* Health Score Gauge */}
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <BarChart3 size={16} color="#818cf8" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Ward Health Score
+                  </h3>
+                </div>
+                {d.health_score != null ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ width: 140, height: 140 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%" barSize={16}
+                          data={[{ name: 'Score', value: Math.round(d.health_score), fill: scoreColor(d.health_score) }]}
+                          startAngle={180} endAngle={0}>
+                          <RadialBar dataKey="value" cornerRadius={8} background={{ fill: '#1e293b' }} />
+                          <text x="70" y="75" textAnchor="middle" dominantBaseline="middle" fill="#f8fafc" fontSize={28} fontWeight={900}>
+                            {Math.round(d.health_score)}
+                          </text>
+                          <text x="70" y="95" textAnchor="middle" dominantBaseline="middle" fill="#64748b" fontSize={11} fontWeight={600}>
+                            / 100
+                          </text>
+                        </RadialBarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                        <span style={{ padding: '0.2rem 0.6rem', borderRadius: 100, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', background: d.health_label === 'Good' ? 'rgba(34,197,94,0.15)' : d.health_label === 'Moderate' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)', color: d.health_label === 'Good' ? '#4ade80' : d.health_label === 'Moderate' ? '#fbbf24' : '#f87171' }}>
+                          {d.health_label}
+                        </span>
+                        {d.ward_rankings && (
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                            #{d.ward_rankings.health_score_rank} of {d.ward_rankings.total_wards} wards
+                          </span>
+                        )}
+                      </div>
+                      {d.health_breakdown && d.health_breakdown.deliberation_score != null && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          {[
+                            { label: 'Complaint Volume', value: Math.round(d.health_breakdown.complaint_score * 100), color: '#818cf8' },
+                            { label: 'Resolution Speed', value: Math.round(d.health_breakdown.resolution_score * 100), color: '#a78bfa' },
+                            { label: 'Civic Engagement', value: Math.round(d.health_breakdown.deliberation_score * 100), color: '#c084fc' },
+                          ].map(s => (
+                            <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.7rem', color: '#94a3b8', width: 100, flexShrink: 0 }}>{s.label}</span>
+                              <div style={{ flex: 1, height: 6, background: '#1e293b', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ width: `${s.value}%`, height: '100%', background: s.color, borderRadius: 3, transition: 'width 0.5s' }} />
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: s.color, fontWeight: 700, width: 28, textAlign: 'right' }}>{s.value}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ color: '#64748b', fontSize: '0.85rem' }}>No health score available</p>
+                )}
+              </div>
+
+              {/* Rankings & YoY Change */}
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <Award size={16} color="#fbbf24" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Ward Rankings & Trends
+                  </h3>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  {[
+                    { label: 'Health Score', rank: d.ward_rankings?.health_score_rank, total: d.ward_rankings?.total_wards, color: '#818cf8', bestIs: 'high' },
+                    { label: 'Complaint Volume', rank: d.ward_rankings?.complaints_rank, total: d.ward_rankings?.total_wards, color: '#f87171', bestIs: 'low' },
+                    { label: 'Resolution Speed', rank: d.ward_rankings?.resolution_rank, total: d.ward_rankings?.total_wards, color: '#fbbf24', bestIs: 'low' },
+                    { label: 'Civic Engagement', rank: d.ward_rankings?.deliberation_rank, total: d.ward_rankings?.total_wards, color: '#4ade80', bestIs: 'high' },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: 'rgba(5,10,24,0.3)', borderRadius: 10, padding: '0.75rem', border: '1px solid rgba(99,102,241,0.06)' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
+                        {item.label}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                        <span style={{ fontSize: '1.2rem', fontWeight: 900, color: item.color }}>
+                          {item.rank ? `#${item.rank}` : '--'}
+                        </span>
+                        {item.total && (
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>of {item.total}</span>
+                        )}
+                      </div>
+                      {d.yoy_change && item.label === 'Health Score' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.2rem' }}>
+                          <TrendArrow value={d.yoy_change.health_score_change} />
+                          <span style={{ fontSize: '0.68rem', color: d.yoy_change.health_score_change > 0 ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                            {d.yoy_change.health_score_change > 0 ? '+' : ''}{d.yoy_change.health_score_change} pts
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* SECTION 2: Your Ward vs City Average */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {d.ward_metrics_history && d.ward_metrics_history.length > 0 && d.city_averages && (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <BarChart3 size={16} color="#818cf8" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Your Ward vs City Average
+                  </h3>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
+                    Latest year: {d.metrics_year}
+                  </span>
+                </div>
+                {(() => {
+                  const latest = d.ward_metrics_history[d.ward_metrics_history.length - 1];
+                  if (!latest) return null;
+                  const compData = [
+                    { metric: 'Health Score', ward: Math.round(latest.health_score), city: d.city_averages.health_score, unit: ' pts', higherIsBetter: true },
+                    { metric: 'Complaints / Capita', ward: latest.per_capita_complaints, city: d.city_averages.per_capita_complaints, unit: '', higherIsBetter: false },
+                    { metric: 'Resolution Days', ward: latest.avg_resolution_days, city: d.city_averages.avg_resolution_days, unit: ' days', higherIsBetter: false },
+                    { metric: 'Deliberations / Capita', ward: latest.per_capita_deliberations, city: d.city_averages.per_capita_deliberations, unit: '', higherIsBetter: true },
+                  ];
+                  return (
+                    <ResponsiveContainer width="100%" height={180}>
+                      <BarChart data={compData} layout="vertical" margin={{ top: 4, right: 24, left: 100, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.06)" horizontal={false} />
+                        <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} />
+                        <YAxis dataKey="metric" type="category" tick={{ fill: '#94a3b8', fontSize: 11 }} width={110} />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Bar dataKey="ward" name="Your Ward" radius={[0, 4, 4, 0]} fill="#818cf8" />
+                        <Bar dataKey="city" name="City Avg" radius={[0, 4, 4, 0]} fill="#475569" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* SECTION 3: Complaint Category Breakdown */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {d.major_categories && d.major_categories.length > 0 && (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <BarChart3 size={16} color="#a78bfa" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Complaint Categories
+                  </h3>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
+                    {d.complaints.length} total complaints
+                  </span>
+                </div>
+                {(() => {
+                  const CATEGORY_COLORS = {
+                    'Potholes': '#ef4444', 'Water Supply': '#3b82f6', 'Drainage': '#f59e0b',
+                    'Garbage': '#22c55e', 'Street Lights': '#eab308', 'Roads': '#64748b', 'Other': '#8b5cf6',
+                    'Solid Waste Management': '#22c55e',
+                  };
+                  return (
+                    <ResponsiveContainer width="100%" height={Math.max(120, d.major_categories.length * 36)}>
+                      <BarChart data={d.major_categories} layout="vertical" margin={{ top: 4, right: 48, left: 90, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.06)" horizontal={false} />
+                        <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} />
+                        <YAxis dataKey="category_display" type="category" tick={{ fill: '#94a3b8', fontSize: 11 }} width={100} />
+                        <Tooltip content={<ChartTooltip unit="" />} />
+                        <Bar dataKey="count" name="Complaints" radius={[0, 4, 4, 0]}>
+                          {d.major_categories.map(entry => (
+                            <Cell key={entry.category_display} fill={CATEGORY_COLORS[entry.category_display] || '#818cf8'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* SECTION 4: Multi-Year Trend Chart (2019-2026) */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {(() => {
+              if (!d.ward_metrics_history || d.ward_metrics_history.length === 0) return null;
+              const chartData = d.ward_metrics_history.map(m => ({
+                year: m.year,
+                total: m.total_complaints,
+                isPredicted: false,
+              }));
+              if (d.predicted_data) {
+                [2025, 2026].forEach(yr => {
+                  const p = d.predicted_data[String(yr)];
+                  if (p) {
+                    const existing = chartData.find(d => d.year === yr);
+                    if (existing) {
+                      existing.total = p.predicted_complaints;
+                      existing.isPredicted = true;
+                    } else {
+                      chartData.push({ year: yr, total: p.predicted_complaints, isPredicted: true });
+                    }
+                  }
+                });
+                chartData.sort((a, b) => a.year - b.year);
+              }
+              const hasPredicted = chartData.some(d => d.isPredicted);
+              return (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <TrendingUp size={16} color="#22c55e" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Complaint Trend (2019-2026)
+                  </h3>
+                  {hasPredicted && (
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
+                      Blue = Actual · Orange = ML Predicted
+                    </span>
+                  )}
+                </div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.08)" />
+                    <XAxis dataKey="year" tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <Tooltip content={<ChartTooltip unit=" complaints" />} />
+                    <Line type="monotone" dataKey="total" name="Complaints" stroke="#818cf8" strokeWidth={3}
+                      dot={(props) => {
+                        const isPred = (props.payload?.year || 0) >= 2025;
+                        return (
+                          <circle cx={props.cx} cy={props.cy} r={isPred ? 5 : 4}
+                            fill={isPred ? '#f59e0b' : '#818cf8'} stroke="none" />
+                        );
+                      }}
+                      activeDot={{ r: 6, fill: '#818cf8' }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )})()}
+
             {/* --- ML Insights / Forecast Card --- */}
             {d.predictions && (
               <div style={{
@@ -265,7 +583,7 @@ const CouncillorPortal = () => {
                         {d.predictions.predicted_complaints?.toLocaleString()}
                       </div>
                       <div style={{ fontSize: '0.72rem', color: '#818cf8', marginTop: '0.2rem' }}>
-                        For next year (2027)
+                        For {d.predicted_data ? Object.keys(d.predicted_data).sort().pop() : '2026'}
                       </div>
                     </div>
 
@@ -331,336 +649,244 @@ const CouncillorPortal = () => {
               </div>
             )}
 
-            {/* --- AI Ward Briefing & Action Plan --- */}
+            {/* --- AI Ward Briefing & Action Plan (senior-friendly) --- */}
             {d.briefing && !d.briefing.error && (
               <div style={{
-                background: 'linear-gradient(135deg, rgba(10, 15, 30, 0.9) 0%, rgba(20, 25, 45, 0.8) 100%)',
-                border: '1px solid rgba(129, 140, 248, 0.25)',
-                borderRadius: 20,
-                padding: '2.2rem',
-                marginBottom: '2rem',
-                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-                position: 'relative',
-                overflow: 'hidden'
+                background: 'linear-gradient(135deg, #0a0f1e 0%, #14192d 100%)',
+                border: '1px solid rgba(129, 140, 248, 0.2)',
+                borderRadius: 16,
+                padding: '1.8rem',
+                marginBottom: '1.5rem',
               }}>
-                {/* Glow effects */}
-                <div style={{
-                  position: 'absolute',
-                  top: '-80px',
-                  right: '-80px',
-                  width: '200px',
-                  height: '200px',
-                  background: 'rgba(99, 102, 241, 0.18)',
-                  filter: 'blur(60px)',
-                  borderRadius: '50%',
-                  pointerEvents: 'none'
-                }} />
-                <div style={{
-                  position: 'absolute',
-                  bottom: '-80px',
-                  left: '-80px',
-                  width: '200px',
-                  height: '200px',
-                  background: 'rgba(168, 85, 247, 0.1)',
-                  filter: 'blur(60px)',
-                  borderRadius: '50%',
-                  pointerEvents: 'none'
-                }} />
-
                 {/* Header */}
                 <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '1rem',
-                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                  paddingBottom: '1.25rem',
-                  marginBottom: '1.75rem'
+                  display: 'flex', alignItems: 'center', gap: '0.8rem',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  paddingBottom: '1rem', marginBottom: '1.2rem', flexWrap: 'wrap',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                    <div style={{
-                      background: 'linear-gradient(135deg, #818cf8 0%, #4f46e5 100%)',
-                      borderRadius: 12,
-                      padding: '0.6rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 0 20px rgba(99, 102, 241, 0.45)'
-                    }}>
-                      <Sparkles size={20} color="#ffffff" style={{ animation: 'pulse 2s infinite' }} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#f8fafc', margin: 0, letterSpacing: '0.02em', background: 'linear-gradient(90deg, #f8fafc 0%, #cbd5e1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                        AI Ward Briefing & Action Plan
-                      </h3>
-                      <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0.2rem 0 0 0', fontWeight: 500 }}>
-                        Synthesized on {new Date(d.briefing.generated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.45rem',
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    border: '1px solid rgba(16, 185, 129, 0.25)',
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: 100
-                  }}>
-                    <span style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: '#10b981',
-                      boxShadow: '0 0 8px #10b981',
-                      display: 'inline-block'
-                    }} />
-                    <span style={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#34d399' }}>
-                      Live ML Analysis
-                    </span>
+                  <Sparkles size={24} color="#818cf8" />
+                  <div>
+                    <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                      AI Ward Briefing
+                    </h3>
+                    <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
+                      {new Date(d.briefing.generated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
                   </div>
                 </div>
 
-                {/* Executive Summary Banner */}
+                {/* Executive Summary — big, prominent */}
                 <div style={{
-                  background: 'rgba(99, 102, 241, 0.05)',
-                  borderLeft: '4px solid #818cf8',
-                  padding: '1rem 1.25rem',
+                  background: 'rgba(99, 102, 241, 0.06)',
+                  borderLeft: '5px solid #818cf8',
+                  padding: '1.2rem 1.4rem',
                   borderRadius: '0 12px 12px 0',
-                  marginBottom: '1.75rem',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                  marginBottom: '1.5rem',
                 }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#818cf8', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>
-                    Executive Summary
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', color: '#818cf8', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
+                    Quick Summary
                   </div>
-                  <div style={{ color: '#e2e8f0', fontSize: '0.92rem', fontWeight: 600, lineHeight: '1.45' }}>
+                  <div style={{ color: '#e2e8f0', fontSize: '1.05rem', fontWeight: 600, lineHeight: '1.5' }}>
                     {d.briefing.summary}
                   </div>
                 </div>
 
-                {/* Grid Layout */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.2fr 0.8fr',
-                  gap: '2.2rem',
-                  alignItems: 'start'
-                }}>
-                  
-                  {/* Left Column: Briefing Sections */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    {[
-                      {
-                        id: 'overview',
-                        icon: <FileText size={16} color="#818cf8" />,
-                        title: 'Ward Overview & Health',
-                        content: d.briefing.sections.header,
-                        borderLeftColor: '#818cf8',
-                        glowColor: 'rgba(99, 102, 241, 0.08)',
-                      },
-                      {
-                        id: 'happening',
-                        icon: <TrendingUp size={16} color="#a78bfa" />,
-                        title: "What's Happening (Trends & Anomalies)",
-                        content: d.briefing.sections.whats_happening,
-                        borderLeftColor: '#a78bfa',
-                        glowColor: 'rgba(167, 139, 250, 0.08)',
-                      },
-                      {
-                        id: 'forecast',
-                        icon: <AlertCircle size={16} color="#fb7185" />,
-                        title: 'Infrastructure Risk Forecast',
-                        content: d.briefing.sections.forecast,
-                        borderLeftColor: '#fb7185',
-                        glowColor: 'rgba(251, 113, 133, 0.08)',
-                      }
-                    ].map(card => {
-                      const isHovered = hoveredBriefCard === card.id;
-                      return (
-                        <div
-                          key={card.id}
-                          onMouseEnter={() => setHoveredBriefCard(card.id)}
-                          onMouseLeave={() => setHoveredBriefCard(null)}
-                          style={{
-                            background: 'rgba(15, 23, 42, 0.45)',
-                            border: '1px solid rgba(255, 255, 255, 0.05)',
-                            borderLeft: `5px solid ${card.borderLeftColor}`,
-                            borderRadius: 14,
-                            padding: '1.35rem',
-                            transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                            transform: isHovered ? 'translateY(-2px)' : 'none',
-                            boxShadow: isHovered ? `0 10px 20px ${card.glowColor}` : 'none',
-                            backdropFilter: 'blur(10px)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                            <div style={{
-                              background: 'rgba(255, 255, 255, 0.03)',
-                              borderRadius: 8,
-                              padding: '0.35rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              {card.icon}
-                            </div>
-                            <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: isHovered ? '#f8fafc' : '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em', transition: 'color 0.2s' }}>
-                              {card.title}
-                            </h4>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                            {card.content && card.content.split('\n').map((line, lineIdx) => (
-                              <div key={lineIdx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-                                <span style={{ color: card.borderLeftColor, fontSize: '1rem', lineHeight: '1.3', userSelect: 'none' }}>•</span>
-                                <span style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.5', fontWeight: 400 }}>
-                                  {line}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right Column: AI Action Plan */}
-                  <div style={{
-                    background: 'rgba(15, 23, 42, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.06)',
-                    borderRadius: 18,
-                    padding: '1.6rem',
-                    boxShadow: 'inset 0 4px 15px rgba(0, 0, 0, 0.35)',
-                    backdropFilter: 'blur(12px)',
-                    position: 'relative'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                        <ListTodo size={18} color="#818cf8" style={{ filter: 'drop-shadow(0 0 5px rgba(129, 140, 248, 0.4))' }} />
-                        <h4 style={{ fontSize: '0.98rem', fontWeight: 900, color: '#f8fafc', margin: 0, letterSpacing: '0.01em' }}>
-                          Action Items
+                {/* Section cards — stacked, simple */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                  {[
+                    {
+                      icon: <FileText size={18} color="#818cf8" />,
+                      title: 'Ward Health',
+                      content: d.briefing.sections.header,
+                      borderColor: '#818cf8',
+                    },
+                    {
+                      icon: <TrendingUp size={18} color="#a78bfa" />,
+                      title: "What's Happening",
+                      content: d.briefing.sections.whats_happening,
+                      borderColor: '#a78bfa',
+                    },
+                    {
+                      icon: <AlertCircle size={18} color="#fb7185" />,
+                      title: 'Forecast',
+                      content: d.briefing.sections.forecast,
+                      borderColor: '#fb7185',
+                    },
+                  ].map(card => (
+                    <div key={card.title} style={{
+                      background: 'rgba(15, 23, 42, 0.5)',
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      borderLeft: `5px solid ${card.borderColor}`,
+                      borderRadius: 12,
+                      padding: '1.1rem 1.3rem',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                        {card.icon}
+                        <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
+                          {card.title}
                         </h4>
                       </div>
-                      <span style={{
-                        fontSize: '0.72rem',
-                        background: 'rgba(99, 102, 241, 0.15)',
-                        border: '1px solid rgba(99, 102, 241, 0.2)',
-                        color: '#a5b4fc',
-                        padding: '0.2rem 0.6rem',
-                        borderRadius: 100,
-                        fontWeight: 700,
-                        letterSpacing: '0.02em'
-                      }}>
-                        {d.briefing.sections.action_items ? (
-                          `${d.briefing.sections.action_items.filter((_, i) => checkedActions[i]).length} / ${d.briefing.sections.action_items.length}`
-                        ) : '0 / 0'}
-                      </span>
-                    </div>
-
-                    {/* Progress Bar */}
-                    {d.briefing.sections.action_items && d.briefing.sections.action_items.length > 0 && (
-                      <div style={{
-                        width: '100%',
-                        height: 7,
-                        background: 'rgba(255, 255, 255, 0.04)',
-                        borderRadius: 4,
-                        marginBottom: '1.5rem',
-                        overflow: 'hidden',
-                        border: '1px solid rgba(255, 255, 255, 0.02)'
-                      }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${(d.briefing.sections.action_items.filter((_, i) => checkedActions[i]).length / d.briefing.sections.action_items.length) * 100}%`,
-                          background: 'linear-gradient(90deg, #818cf8 0%, #c084fc 100%)',
-                          borderRadius: 4,
-                          boxShadow: '0 0 10px rgba(129, 140, 248, 0.5)',
-                          transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
-                        }} />
-                      </div>
-                    )}
-
-                    {/* Tasks List */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                      {d.briefing.sections.action_items && d.briefing.sections.action_items.map((item, idx) => {
-                        const isChecked = !!checkedActions[idx];
-                        const isHovered = hoveredAction === idx;
-                        
-                        // Parse critical severity (e.g. Health is critical)
-                        const isCritical = item.toLowerCase().includes('critical') || item.toLowerCase().includes('spike');
-                        const cardBorder = isChecked 
-                          ? '1px solid rgba(255, 255, 255, 0.05)' 
-                          : isHovered
-                            ? '1px solid rgba(99, 102, 241, 0.35)'
-                            : isCritical
-                              ? '1px solid rgba(239, 68, 68, 0.2)'
-                              : '1px solid rgba(255, 255, 255, 0.06)';
-                              
-                        const cardBg = isChecked
-                          ? 'rgba(255, 255, 255, 0.01)'
-                          : isHovered
-                            ? 'rgba(99, 102, 241, 0.06)'
-                            : isCritical
-                              ? 'rgba(239, 68, 68, 0.03)'
-                              : 'rgba(255, 255, 255, 0.02)';
-
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => toggleAction(idx)}
-                            onMouseEnter={() => setHoveredAction(idx)}
-                            onMouseLeave={() => setHoveredAction(null)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'flex-start',
-                              gap: '0.85rem',
-                              background: cardBg,
-                              border: cardBorder,
-                              borderRadius: 12,
-                              padding: '0.85rem 1rem',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                              opacity: isChecked ? 0.45 : 1,
-                              transform: (isHovered && !isChecked) ? 'scale(1.01)' : 'none',
-                              boxShadow: (isHovered && !isChecked) ? '0 4px 15px rgba(0,0,0,0.15)' : 'none',
-                              borderLeft: isCritical && !isChecked ? '3px solid #ef4444' : cardBorder
-                            }}
-                          >
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: 18,
-                              height: 18,
-                              borderRadius: 5,
-                              border: isChecked ? '1px solid #10b981' : '1px solid #4b5563',
-                              background: isChecked ? '#10b981' : 'transparent',
-                              marginTop: '0.1rem',
-                              transition: 'all 0.15s ease',
-                              flexShrink: 0
-                            }}>
-                              {isChecked && (
-                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <path d="M1.5 4L3.8 6.3L8.5 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                              )}
-                            </div>
-                            <span style={{
-                              color: isChecked ? '#64748b' : isCritical ? '#fda4af' : '#e2e8f0',
-                              fontSize: '0.84rem',
-                              lineHeight: '1.45',
-                              textDecoration: isChecked ? 'line-through' : 'none',
-                              userSelect: 'none',
-                              fontWeight: isCritical ? 600 : 500,
-                            }}>
-                              {item}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {card.content && card.content.split('\n').map((line, i) => (
+                          <div key={i} style={{ display: 'flex', gap: '0.5rem' }}>
+                            <span style={{ color: card.borderColor, fontSize: '1rem', lineHeight: '1.4' }}>•</span>
+                            <span style={{ color: '#cbd5e1', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                              {line}
                             </span>
                           </div>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
+                  ))}
+                </div>
+
+                {/* Action Items — big, touch-friendly */}
+                <div style={{
+                  background: 'rgba(15, 23, 42, 0.4)',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  borderRadius: 14, padding: '1.3rem',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <ListTodo size={20} color="#818cf8" />
+                      <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
+                        Action Items
+                      </h4>
+                    </div>
+                    <span style={{
+                      fontSize: '0.8rem', background: 'rgba(99,102,241,0.15)', color: '#a5b4fc',
+                      padding: '0.25rem 0.75rem', borderRadius: 100, fontWeight: 700,
+                    }}>
+                      {d.briefing.sections.action_items ? (
+                        `${d.briefing.sections.action_items.filter((_, i) => checkedActions[i]).length} / ${d.briefing.sections.action_items.length}`
+                      ) : '0 / 0'}
+                    </span>
                   </div>
 
+                  {d.briefing.sections.action_items && d.briefing.sections.action_items.length > 0 && (
+                    <>
+                      <div style={{
+                        width: '100%', height: 8, background: 'rgba(255,255,255,0.04)',
+                        borderRadius: 4, marginBottom: '1rem', overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          height: '100%', borderRadius: 4,
+                          width: `${(d.briefing.sections.action_items.filter((_, i) => checkedActions[i]).length / d.briefing.sections.action_items.length) * 100}%`,
+                          background: 'linear-gradient(90deg, #818cf8, #c084fc)',
+                          transition: 'width 0.4s',
+                        }} />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                        {d.briefing.sections.action_items.map((item, idx) => {
+                          const isChecked = !!checkedActions[idx];
+                          const lower = item.toLowerCase();
+                          const isEmergency = lower.includes('immediately') || lower.includes('spike') || (lower.includes('low') && !lower.includes('normal'));
+                          const isImportant = lower.includes('rising') || lower.includes('needs') || lower.includes('shift') || lower.includes('risk');
+                          const priorityColor = isEmergency ? '#ef4444' : isImportant ? '#f59e0b' : '#3b82f6';
+                          const priorityLabel = isEmergency ? 'EMERGENCY' : isImportant ? 'IMPORTANT' : 'KEEP WATCH';
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => toggleAction(idx)}
+                              style={{
+                                display: 'flex', alignItems: 'flex-start', gap: '0.8rem',
+                                background: isChecked ? 'rgba(255,255,255,0.02)' : isEmergency ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.02)',
+                                border: isChecked ? '1px solid rgba(255,255,255,0.04)' : isEmergency ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                                borderLeft: isEmergency && !isChecked ? '4px solid #ef4444' : '4px solid transparent',
+                                borderRadius: 10, padding: '0.9rem 1rem',
+                                cursor: 'pointer', transition: 'all 0.15s',
+                                opacity: isChecked ? 0.4 : 1,
+                              }}
+                            >
+                              <div style={{
+                                width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: '0.05rem',
+                                border: isChecked ? '1px solid #10b981' : '1px solid #64748b',
+                                background: isChecked ? '#10b981' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                {isChecked && (
+                                  <svg width="12" height="10" viewBox="0 0 10 8" fill="none">
+                                    <path d="M1.5 4L3.8 6.3L8.5 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{
+                                  fontSize: '0.95rem',
+                                  color: isChecked ? '#64748b' : '#e2e8f0',
+                                  textDecoration: isChecked ? 'line-through' : 'none',
+                                  lineHeight: '1.5',
+                                  fontWeight: isEmergency ? 600 : 400,
+                                }}>
+                                  {item}
+                                </div>
+                                <span style={{
+                                  fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase',
+                                  padding: '0.1rem 0.45rem', borderRadius: 3,
+                                  background: isEmergency ? 'rgba(239,68,68,0.15)' : isImportant ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
+                                  color: priorityColor,
+                                  display: 'inline-block', marginTop: '0.3rem',
+                                }}>
+                                  {priorityLabel}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
+              </div>
+            )}
+
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* SECTION 5: Complaint Map with Hotspots */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {d.complaints.some(c => c.latitude && c.longitude) && (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <MapPin size={16} color="#22c55e" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Complaint Map
+                  </h3>
+                  {hotspots.length > 0 && (
+                    <span style={{ fontSize: '0.72rem', color: '#f59e0b', marginLeft: 'auto' }}>
+                      {hotspots.length} hotspot{hotspots.length > 1 ? 's' : ''} detected
+                    </span>
+                  )}
+                </div>
+                <MapContainer center={[19.076, 72.877]} zoom={12} style={{ height: 380, borderRadius: 12, zIndex: 1 }}
+                  key={d.ward.ward_name}>
+                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  {d.complaints.filter(c => c.latitude && c.longitude).map(c => (
+                    <Marker key={c.id} position={[c.latitude, c.longitude]} icon={createPinIcon(c.category)}>
+                      <Popup>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '0.8rem', maxWidth: 220 }}>
+                          <strong>{c.category}</strong><br />
+                          {c.description.slice(0, 80)}{c.description.length > 80 ? '...' : ''}<br />
+                          <span style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                            {new Date(c.created_at).toLocaleDateString('en-IN')} · {c.status}
+                          </span>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+                  {hotspots.filter(h => h.count >= 2).map(h => (
+                    <Circle key={h.cluster_id} center={[h.center_lat, h.center_lng]}
+                      radius={100} pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.15, weight: 2 }} />
+                  ))}
+                </MapContainer>
+                {hotspots.length > 0 && (
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                    {hotspots.map(h => (
+                      <span key={h.cluster_id} style={{ fontSize: '0.72rem', background: 'rgba(239,68,68,0.1)', color: '#f87171', padding: '0.25rem 0.6rem', borderRadius: 100 }}>
+                        {h.count} complaints near {h.center_lat.toFixed(3)}, {h.center_lng.toFixed(3)}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -721,6 +947,11 @@ const CouncillorPortal = () => {
                             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
                               {new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </div>
+                            {c.resolved_at && (
+                              <div style={{ fontSize: '0.68rem', color: '#22c55e', marginTop: '0.1rem' }}>
+                                Resolved: {new Date(c.resolved_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: '0.85rem 1.25rem', verticalAlign: 'top' }}>
                             {c.image ? (
@@ -735,7 +966,21 @@ const CouncillorPortal = () => {
                               <span style={{ color: '#334155', fontSize: '0.75rem' }}>--</span>
                             )}
                           </td>
-                          <td style={{ padding: '0.85rem 1.25rem', verticalAlign: 'top', color: '#cbd5e1' }}>{c.category}</td>
+                          <td style={{ padding: '0.85rem 1.25rem', verticalAlign: 'top' }}>
+                            <div style={{ color: '#cbd5e1' }}>{c.category}</div>
+                            {(() => {
+                              const escKey = CATEGORY_DISPLAY_TO_KEY[c.category] || c.category;
+                              const esc = d.escalation_data?.find(e => e.category === escKey);
+                              if (!esc || esc.escalation_rate < 0.1) return null;
+                              const level = esc.escalation_rate >= 0.4 ? 'high' : esc.escalation_rate >= 0.2 ? 'medium' : 'low';
+                              const ec = ESCALATION_COLORS[level];
+                              return (
+                                <span style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', background: ec.bg, color: ec.color, padding: '0.1rem 0.45rem', borderRadius: 3, display: 'inline-block', marginTop: '0.2rem' }}>
+                                  {Math.round(esc.escalation_rate * 100)}% escalate
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td style={{ padding: '0.85rem 1.25rem', verticalAlign: 'top', maxWidth: '320px' }}>
                             <div style={{ lineHeight: '1.5', color: '#94a3b8' }}>{c.description}</div>
                             {c.latitude && c.longitude && (

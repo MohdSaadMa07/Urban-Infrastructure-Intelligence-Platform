@@ -75,12 +75,27 @@ class Complaint(models.Model):
     image = models.ImageField(upload_to='complaint_images/', null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
     created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
         return f"{self.get_category_display()} - Ward {self.ward.ward_name}"
+
+
+class PortalMetrics(models.Model):
+    ward = models.ForeignKey(Ward, on_delete=models.CASCADE, related_name='portal_metrics')
+    year = models.PositiveSmallIntegerField()
+    total_complaints = models.IntegerField(default=0)
+    resolved_complaints = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = (('ward', 'year'),)
+        verbose_name_plural = 'Portal Metrics'
+
+    def __str__(self):
+        return f"{self.ward.ward_name} - {self.year} (Portal)"
 
 
 class WardPrediction(models.Model):
@@ -90,11 +105,14 @@ class WardPrediction(models.Model):
         ('high', 'High Risk'),
     ]
     ward = models.ForeignKey(Ward, on_delete=models.CASCADE, related_name='predictions')
-    prediction_date = models.DateField(auto_now_add=True)
+    prediction_date = models.DateField()
     predicted_risk = models.CharField(max_length=20, choices=RISK_CHOICES)
     predicted_complaints = models.IntegerField()
+    predicted_complaints_lower = models.IntegerField(null=True, blank=True)
+    predicted_complaints_upper = models.IntegerField(null=True, blank=True)
     predicted_health_score = models.FloatField(null=True, blank=True)
     recommendation = models.TextField(blank=True)
+    top_features = models.JSONField(null=True, blank=True)
     model_version = models.CharField(max_length=50)
     created_at = models.DateTimeField(auto_now_add=True)
 

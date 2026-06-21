@@ -1,14 +1,11 @@
 """
 Feature engineering for ward-level civic metrics.
 
-Builds a feature matrix from CivicMetrics (DB) and optional category-wide data.
+Builds a feature matrix from CivicMetrics (DB) with lag/trend features.
 """
 
 import numpy as np
 import pandas as pd
-from django.db.models import Avg
-
-from ml.utils import load_category_data
 
 
 def _compute_health_score_from_row(row):
@@ -30,9 +27,12 @@ def _compute_health_score_from_row(row):
     return round(max(0.0, min(100.0, raw)), 2)
 
 
-def build_feature_matrix(years=None):
+def build_feature_matrix(years=None, training=False):
     """
-    Build feature matrix and target vectors from CivicMetrics and optional category data.
+    Build feature matrix and target vectors from CivicMetrics.
+
+    Features are ward-level only — no city-wide category data.
+    Uses lag and rolling-window features instead of cyclical encoding.
 
     Args:
         years: iterable of years to include (default: all available)
@@ -44,7 +44,7 @@ def build_feature_matrix(years=None):
     """
     from api.models import CivicMetrics, Ward
 
-    # --- Step 1: Load base metrics ---
+    # --- Step 1: Load base metrics (CivicMetrics = pure Praja data only) ---
     qs = CivicMetrics.objects.select_related("ward").all()
     if years:
         qs = qs.filter(year__in=list(years))
@@ -70,10 +70,8 @@ def build_feature_matrix(years=None):
             "per_capita_deliberations": m.per_capita_deliberations or 0,
             "avg_councillors": m.avg_councillors or 0,
         }
-        # Derived rates
         row["resolution_rate"] = round(closed / total, 4) if total > 0 else 0
         row["escalation_rate"] = round(escalated / total, 4) if total > 0 else 0
-        # Health score
         row["health_score"] = _compute_health_score_from_row(row)
         rows.append(row)
 
@@ -82,34 +80,25 @@ def build_feature_matrix(years=None):
     if df.empty:
         return df, pd.Series(dtype=object), pd.Series(dtype=float)
 
-    # --- Step 2: Lagged features ---
+    # --- Step 2: Lag and trend features (per ward) ---
     df = df.sort_values(["ward_name", "year"])
-    df["prev_year_health_score"] = df.groupby("ward_name")["health_score"].shift(1)
+
+    df["complaints_lag1"] = df.groupby("ward_name")["total_complaints"].shift(1)
+    df["complaints_lag2"] = df.groupby("ward_name")["total_complaints"].shift(2)
+    df["resolution_days_lag1"] = df.groupby("ward_name")["avg_resolution_days"].shift(1)
+    df["complaints_rolling_mean_3yr"] = (
+        df.groupby("ward_name")["total_complaints"]
+        .transform(lambda x: x.rolling(3, min_periods=1).mean())
+    )
     df["complaint_growth_rate"] = df.groupby("ward_name")["total_complaints"].pct_change() * 100
     df["complaint_growth_rate"] = df["complaint_growth_rate"].fillna(0)
+    df["prev_year_health_score"] = df.groupby("ward_name")["health_score"].shift(1)
 
-    # --- Step 3: Cyclical year encoding ---
-    df["year_sin"] = np.sin(2 * np.pi * (df["year"] - 2019) / 10)
-    df["year_cos"] = np.cos(2 * np.pi * (df["year"] - 2019) / 10)
-
-    # --- Step 4: Category distribution features ---
-    cat_df = load_category_data()
-    if cat_df is not None:
-        cat_df = cat_df.rename(columns={"Year": "year"})
-        # Merge year-aligned category percentages
-        df = df.merge(cat_df, on="year", how="left")
-        # For years beyond cat data, use the latest available distribution
-        max_cat_year = cat_df["year"].max()
-        for col in [c for c in cat_df.columns if c != "year"]:
-            df[col] = df[col].fillna(
-                df[df["year"] == max_cat_year][col].iloc[0] if max_cat_year in df["year"].values else 0
-            )
-
-    # --- Step 5: Fill NaN (first-year lagged features) ---
+    # --- Step 3: Fill NaN (first-year lags) ---
     num_cols = df.select_dtypes(include=[np.number]).columns
     df[num_cols] = df[num_cols].fillna(0)
 
-    # --- Step 6: Target variables ---
+    # --- Step 4: Target variables ---
     def risk_label(score):
         if score >= 70:
             return "Low"
@@ -120,9 +109,22 @@ def build_feature_matrix(years=None):
     y_risk = df["health_score"].apply(risk_label)
     y_complaints = df["total_complaints"]
 
+    # When training, shift target so T features predict T+1 complaints
+    if training:
+        y_complaints = df.groupby("ward_name")["total_complaints"].shift(-1)
+        valid = y_complaints.notna()
+
     # Feature columns (exclude identifiers and targets)
     exclude = {"ward_no", "ward_name", "year", "health_score", "total_complaints"}
     feature_cols = [c for c in df.columns if c not in exclude]
     X = df[feature_cols].copy()
 
-    return X, y_risk, y_complaints, df[["ward_no", "ward_name", "year", "health_score", "total_complaints"]]
+    meta = df[["ward_no", "ward_name", "year", "health_score", "total_complaints"]]
+
+    if training:
+        X = X.loc[valid]
+        y_risk = y_risk.loc[valid]
+        y_complaints = y_complaints.loc[valid]
+        meta = meta.loc[valid]
+
+    return X, y_risk, y_complaints, meta

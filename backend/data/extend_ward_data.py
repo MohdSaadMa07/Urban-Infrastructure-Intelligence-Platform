@@ -1,5 +1,5 @@
 """
-Extend ward_metrics_multiyear.csv with 2024-2026 data.
+Extend ward_metrics_multiyear.csv with 2024 data using Praja Foundation report estimates.
 
 Methodology:
 - 2024 Total_Complaints: Compute 2023→2024 growth rate from Praja report
@@ -9,7 +9,7 @@ Methodology:
 - Per_Capita_Complaints: Compute using per-ward Total/PerCapita ratio from 2023.
 - Deliberation 2024+: set to 0 (no elected councillors since March 2022).
 - Avg_No_of_Councillors 2024+: same as 2023.
-- 2025-2026: linear extrapolation per ward from 2019-2024 trend.
+- 2025-2026: NOT generated here — use XGBoost ML predictions instead (see ml/predict.py)
 
 Context: Existing CSV values differ from Praja report absolute figures (~7-10x larger).
 This suggests a different data source/aggregation. Using Praja-derived growth rates 
@@ -23,7 +23,6 @@ Data sources:
 """
 import csv
 import os
-from collections import defaultdict
 
 CSV_PATH = os.path.join(os.path.dirname(__file__), 'ward_metrics_multiyear.csv')
 OUT_PATH = os.path.join(os.path.dirname(__file__), 'ward_metrics_multiyear_extended.csv')
@@ -146,62 +145,21 @@ def make_2024_rows(rows, complaint_ratios, councillors):
             'Total_Complaints': total,
             'Per_Capita_Complaints': per_capita,
             'Avg_No_of_Days': round(avg_days, 1),
-            'Total_Deliberation': 0,
-            'Per_Capita_Deliberation': 0,
+            'Total_Deliberation': existing_row['Total_Deliberation'],
+            'Per_Capita_Deliberation': existing_row['Per_Capita_Deliberation'],
         })
 
     return new_rows
 
 
-def linear_extrapolate(ward_rows, field, target_year):
-    """Simple linear regression from available years to predict target_year."""
-    points = [(r['Year'], r[field]) for r in ward_rows]
-    n = len(points)
-    if n < 2:
-        return points[0][1] if points else 0
-
-    sx = sum(p[0] for p in points)
-    sy = sum(p[1] for p in points)
-    sxy = sum(p[0] * p[1] for p in points)
-    sxx = sum(p[0] * p[0] for p in points)
-
-    denom = n * sxx - sx * sx
-    if abs(denom) < 1e-10:
-        return sy / n
-
-    slope = (n * sxy - sx * sy) / denom
-    intercept = (sy - slope * sx) / n
-    return slope * target_year + intercept
-
-
-def extrapolate_year(ward_rows, ward, year, complaint_ratios, councillors):
-    """Extrapolate a single year (2025 or 2026) for a ward."""
-    total = max(100, round(linear_extrapolate(ward_rows, 'Total_Complaints', year)))
-    avg_days = max(1, round(linear_extrapolate(ward_rows, 'Avg_No_of_Days', year), 1))
-
-    ratio = complaint_ratios.get(ward, 1)
-    per_capita = round(total / ratio) if ratio > 0 else 0
-
-    return {
-        'Ward': ward, 'Year': year,
-        'Avg_No_of_Councillors': councillors.get(ward, 0),
-        'Total_Complaints': total,
-        'Per_Capita_Complaints': per_capita,
-        'Avg_No_of_Days': avg_days,
-        'Total_Deliberation': 0,
-        'Per_Capita_Deliberation': 0,
-    }
-
-
 def main():
     print(f"Reading: {CSV_PATH}")
     rows = read_existing_csv(CSV_PATH)
-    print(f"  {len(rows)} existing rows")
+    print(f"  {len(rows)} existing rows (2019-2023)")
 
     complaint_ratios, councillors = compute_ratios(rows)
-    all_wards = sorted(set(r['Ward'] for r in rows))
 
-    # 2024
+    # 2024 only — using Praja growth rates (no linear extrapolation)
     rows_2024 = make_2024_rows(rows, complaint_ratios, councillors)
     print(f"\n2024 (Praja growth rates applied):")
 
@@ -211,22 +169,8 @@ def main():
         pct = PRAJA_TOTAL_COMPLAINTS[w][2024] / PRAJA_TOTAL_COMPLAINTS[w][2023] - 1
         print(f"  {w}: {r23['Total_Complaints']:,} -> {r24['Total_Complaints']:,} (delta={pct:+.1%}, days {r23['Avg_No_of_Days']}->{r24['Avg_No_of_Days']})")
 
-    # Build trend data (2019-2024)
-    rows_by_ward = defaultdict(list)
-    for r in rows:
-        rows_by_ward[r['Ward']].append(r)
-    for r in rows_2024:
-        rows_by_ward[r['Ward']].append(r)
-
-    # 2025-2026 extrapolation
-    rows_2025, rows_2026 = [], []
-    for w in all_wards:
-        sr = sorted(rows_by_ward[w], key=lambda r: r['Year'])
-        rows_2025.append(extrapolate_year(sr, w, 2025, complaint_ratios, councillors))
-        rows_2026.append(extrapolate_year(sr, w, 2026, complaint_ratios, councillors))
-
-    # Write
-    all_rows = rows + rows_2024 + rows_2025 + rows_2026
+    # Write: 2019-2023 actual + 2024 Praja-estimated
+    all_rows = rows + rows_2024
     all_rows.sort(key=lambda r: (r['Ward'], r['Year']))
 
     with open(OUT_PATH, 'w', newline='', encoding='utf-8') as f:
@@ -237,13 +181,13 @@ def main():
     print(f"\nWritten {len(all_rows)} rows to: {OUT_PATH}")
 
     # Grand totals
-    from collections import Counter
-    by_year = Counter()
+    by_year = {}
     for r in all_rows:
-        by_year[r['Year']] += r['Total_Complaints']
+        by_year[r['Year']] = by_year.get(r['Year'], 0) + r['Total_Complaints']
     print("Grand Total_Complaints by year:")
     for y in sorted(by_year):
         print(f"  {y}: {by_year[y]:>10,}")
+    print("\nNOTE: 2025-2026 data will be generated by XGBoost ML predictions (ml/predict.py)")
 
 
 if __name__ == '__main__':
