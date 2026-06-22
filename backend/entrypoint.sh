@@ -19,4 +19,22 @@ with connection.cursor() as c:
     python manage.py migrate --noinput
 fi
 
+# Load seed data if database is empty
+echo "Checking if seed data needs to be loaded..."
+WARD_COUNT=$(python -c "
+import django; django.setup()
+from api.models import Ward
+print(Ward.objects.count())
+" 2>/dev/null)
+
+if [ "$WARD_COUNT" = "0" ]; then
+    echo "No wards found. Loading seed data..."
+    python manage.py load_wards
+    python manage.py load_metrics
+    python manage.py update_health_scores
+    echo "Seed data loaded."
+else
+    echo "Database already has $WARD_COUNT wards. Skipping seed."
+fi
+
 exec gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --timeout 120
