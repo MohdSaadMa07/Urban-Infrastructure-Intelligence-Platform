@@ -24,8 +24,8 @@ python manage.py load_wards
 python manage.py load_metrics
 python manage.py update_health_scores
 
-# Create default councillor accounts (one per ward) if they don't exist
-echo "Creating default councillor accounts..."
+# Create/reset default councillor accounts (one per ward)
+echo "Creating/resetting default councillor accounts..."
 python -c "
 import django; django.setup()
 from django.contrib.auth.models import User
@@ -34,18 +34,25 @@ from api.models import Ward, UserProfile
 for ward in Ward.objects.all():
     name = ward.ward_name.lower().replace('/', '_')
     username = f'{name}ward'
-    if not User.objects.filter(username=username).exists():
-        user = User.objects.create_user(
-            username=username,
-            password='123456',
-            email=f'{name}ward@urbaniq.local',
-        )
-        user.profile.role = 'councillor'
-        user.profile.ward = ward
-        user.profile.save()
+    user, created = User.objects.get_or_create(
+        username=username,
+        defaults={
+            'email': f'{name}ward@urbaniq.local',
+        }
+    )
+    user.set_password('123456')
+    user.email = f'{name}ward@urbaniq.local'
+    user.save()
+
+    profile = user.profile
+    profile.role = 'councillor'
+    profile.ward = ward
+    profile.save()
+
+    if created:
         print(f'  Created councillor: {username} (Ward {ward.ward_name})')
     else:
-        print(f'  Skipped (exists): {username}')
+        print(f'  Reset password for: {username} (Ward {ward.ward_name})')
 "
 echo "Seed data loaded."
 
