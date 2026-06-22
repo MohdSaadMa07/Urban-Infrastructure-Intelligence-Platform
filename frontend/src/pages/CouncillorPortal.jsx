@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Hexagon, LogOut, Filter, AlertCircle, CheckCircle, Clock,
+  Hexagon, LogOut, Filter, AlertCircle, CheckCircle,
   MapPin, BarChart3, TrendingUp, RefreshCw, Sparkles, ListTodo, FileText,
-  ArrowUp, ArrowDown, Minus, Award, Crosshair
+  ArrowUp, ArrowDown, Minus, Award, ChartPie
 } from 'lucide-react';
 import {
-  RadialBarChart, RadialBar, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  RadialBarChart, RadialBar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend,
 } from 'recharts';
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,17 +17,18 @@ import { useAuth } from '../context/AuthContext';
 import L from 'leaflet';
 
 const CATEGORY_PIN_COLORS = {
-  'Garbage': '#f59e0b', 'Roads': '#ef4444', 'Water': '#3b82f6',
-  'Sewage': '#8b5cf6', 'Street Light': '#eab308', 'Drainage': '#06b6d4',
-  'Encroachment': '#ec4899', 'Other': '#64748b',
+  'Garbage': '#f59e0b', 'Potholes': '#ef4444', 'Roads': '#ef4444',
+  'Water Supply': '#3b82f6', 'Drainage': '#06b6d4',
+  'Street Lights': '#eab308', 'Other': '#64748b',
 };
 function createPinIcon(category) {
   const fill = CATEGORY_PIN_COLORS[category] || '#64748b';
   return L.divIcon({
-    className: '',
-    html: `<svg width="24" height="36" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24s12-15 12-24C24 5.373 18.627 0 12 0z" fill="${fill}" stroke="white" stroke-width="1.5"/>
-      <circle cx="12" cy="12" r="5" fill="white"/>
+    className: 'complaint-pin',
+    html: `<svg width="24" height="36" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24s12-15 12-24C24 5.373 18.627 0 12 0z" fill="${fill}" stroke="#fff" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="5" fill="#fff"/>
+      <circle cx="12" cy="12" r="2" fill="${fill}"/>
     </svg>`,
     iconSize: [24, 36],
     iconAnchor: [12, 36],
@@ -92,7 +93,7 @@ const CouncillorPortal = () => {
           headers: { Authorization: `Bearer ${getAccessToken()}` },
         });
         if (hres.ok) setHotspots(await hres.json());
-      } catch {}
+      } catch (e) { console.warn('Hotspots fetch failed:', e); }
     } catch (err) {
       setError(err.message);
     }
@@ -281,6 +282,32 @@ const CouncillorPortal = () => {
                   }}>
                     {d.health_label}
                   </span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const wardName = d.ward?.ward_name;
+                        if (!wardName) return;
+                        const res = await fetch(`/api/reports/download/?ward=${encodeURIComponent(wardName)}`, {
+                          headers: { Authorization: `Bearer ${getAccessToken()}` },
+                        });
+                        if (!res.ok) { alert('Report generation failed'); return; }
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = `ward_${wardName}_report.pdf`; a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (e) { alert('Could not download report'); }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.4rem',
+                      padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid rgba(99,102,241,0.3)',
+                      background: 'rgba(99,102,241,0.1)', color: '#818cf8',
+                      fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                    title="Download PDF Report"
+                  >
+                    <FileText size={14} /> PDF Report
+                  </button>
                 </div>
               )}
             </div>
@@ -309,159 +336,13 @@ const CouncillorPortal = () => {
               ))}
             </div>
 
-            {/* ════════════════════════════════════════════════════════════════ */}
-            {/* SECTION 1: Health Score Gauge + Ward Rankings */}
-            {/* ════════════════════════════════════════════════════════════════ */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-              {/* Health Score Gauge */}
-              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  <BarChart3 size={16} color="#818cf8" />
-                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Ward Health Score
-                  </h3>
-                </div>
-                {d.health_score != null ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ width: 140, height: 140 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%" barSize={16}
-                          data={[{ name: 'Score', value: Math.round(d.health_score), fill: scoreColor(d.health_score) }]}
-                          startAngle={180} endAngle={0}>
-                          <RadialBar dataKey="value" cornerRadius={8} background={{ fill: '#1e293b' }} />
-                          <text x="70" y="75" textAnchor="middle" dominantBaseline="middle" fill="#f8fafc" fontSize={28} fontWeight={900}>
-                            {Math.round(d.health_score)}
-                          </text>
-                          <text x="70" y="95" textAnchor="middle" dominantBaseline="middle" fill="#64748b" fontSize={11} fontWeight={600}>
-                            / 100
-                          </text>
-                        </RadialBarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                        <span style={{ padding: '0.2rem 0.6rem', borderRadius: 100, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', background: d.health_label === 'Good' ? 'rgba(34,197,94,0.15)' : d.health_label === 'Moderate' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)', color: d.health_label === 'Good' ? '#4ade80' : d.health_label === 'Moderate' ? '#fbbf24' : '#f87171' }}>
-                          {d.health_label}
-                        </span>
-                        {d.ward_rankings && (
-                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                            #{d.ward_rankings.health_score_rank} of {d.ward_rankings.total_wards} wards
-                          </span>
-                        )}
-                      </div>
-                      {d.health_breakdown && d.health_breakdown.deliberation_score != null && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                          {[
-                            { label: 'Complaint Volume', value: Math.round(d.health_breakdown.complaint_score * 100), color: '#818cf8' },
-                            { label: 'Resolution Speed', value: Math.round(d.health_breakdown.resolution_score * 100), color: '#a78bfa' },
-                            { label: 'Civic Engagement', value: Math.round(d.health_breakdown.deliberation_score * 100), color: '#c084fc' },
-                          ].map(s => (
-                            <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '0.7rem', color: '#94a3b8', width: 100, flexShrink: 0 }}>{s.label}</span>
-                              <div style={{ flex: 1, height: 6, background: '#1e293b', borderRadius: 3, overflow: 'hidden' }}>
-                                <div style={{ width: `${s.value}%`, height: '100%', background: s.color, borderRadius: 3, transition: 'width 0.5s' }} />
-                              </div>
-                              <span style={{ fontSize: '0.7rem', color: s.color, fontWeight: 700, width: 28, textAlign: 'right' }}>{s.value}%</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p style={{ color: '#64748b', fontSize: '0.85rem' }}>No health score available</p>
-                )}
-              </div>
-
-              {/* Rankings & YoY Change */}
-              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  <Award size={16} color="#fbbf24" />
-                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Ward Rankings & Trends
-                  </h3>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  {[
-                    { label: 'Health Score', rank: d.ward_rankings?.health_score_rank, total: d.ward_rankings?.total_wards, color: '#818cf8', bestIs: 'high' },
-                    { label: 'Complaint Volume', rank: d.ward_rankings?.complaints_rank, total: d.ward_rankings?.total_wards, color: '#f87171', bestIs: 'low' },
-                    { label: 'Resolution Speed', rank: d.ward_rankings?.resolution_rank, total: d.ward_rankings?.total_wards, color: '#fbbf24', bestIs: 'low' },
-                    { label: 'Civic Engagement', rank: d.ward_rankings?.deliberation_rank, total: d.ward_rankings?.total_wards, color: '#4ade80', bestIs: 'high' },
-                  ].map(item => (
-                    <div key={item.label} style={{ background: 'rgba(5,10,24,0.3)', borderRadius: 10, padding: '0.75rem', border: '1px solid rgba(99,102,241,0.06)' }}>
-                      <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
-                        {item.label}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
-                        <span style={{ fontSize: '1.2rem', fontWeight: 900, color: item.color }}>
-                          {item.rank ? `#${item.rank}` : '--'}
-                        </span>
-                        {item.total && (
-                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>of {item.total}</span>
-                        )}
-                      </div>
-                      {d.yoy_change && item.label === 'Health Score' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.2rem' }}>
-                          <TrendArrow value={d.yoy_change.health_score_change} />
-                          <span style={{ fontSize: '0.68rem', color: d.yoy_change.health_score_change > 0 ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
-                            {d.yoy_change.health_score_change > 0 ? '+' : ''}{d.yoy_change.health_score_change} pts
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* ════════════════════════════════════════════════════════════════ */}
-            {/* SECTION 2: Your Ward vs City Average */}
-            {/* ════════════════════════════════════════════════════════════════ */}
-            {d.ward_metrics_history && d.ward_metrics_history.length > 0 && d.city_averages && (
-              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <BarChart3 size={16} color="#818cf8" />
-                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Your Ward vs City Average
-                  </h3>
-                  <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
-                    Latest year: {d.metrics_year}
-                  </span>
-                </div>
-                {(() => {
-                  const latest = d.ward_metrics_history[d.ward_metrics_history.length - 1];
-                  if (!latest) return null;
-                  const compData = [
-                    { metric: 'Health Score', ward: Math.round(latest.health_score), city: d.city_averages.health_score, unit: ' pts', higherIsBetter: true },
-                    { metric: 'Complaints / Capita', ward: latest.per_capita_complaints, city: d.city_averages.per_capita_complaints, unit: '', higherIsBetter: false },
-                    { metric: 'Resolution Days', ward: latest.avg_resolution_days, city: d.city_averages.avg_resolution_days, unit: ' days', higherIsBetter: false },
-                    { metric: 'Deliberations / Capita', ward: latest.per_capita_deliberations, city: d.city_averages.per_capita_deliberations, unit: '', higherIsBetter: true },
-                  ];
-                  return (
-                    <ResponsiveContainer width="100%" height={180}>
-                      <BarChart data={compData} layout="vertical" margin={{ top: 4, right: 24, left: 100, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.06)" horizontal={false} />
-                        <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} />
-                        <YAxis dataKey="metric" type="category" tick={{ fill: '#94a3b8', fontSize: 11 }} width={110} />
-                        <Tooltip content={<ChartTooltip />} />
-                        <Bar dataKey="ward" name="Your Ward" radius={[0, 4, 4, 0]} fill="#818cf8" />
-                        <Bar dataKey="city" name="City Avg" radius={[0, 4, 4, 0]} fill="#475569" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* ════════════════════════════════════════════════════════════════ */}
-            {/* SECTION 3: Complaint Category Breakdown */}
-            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* ── Complaint Categories ── */}
             {d.major_categories && d.major_categories.length > 0 && (
               <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <BarChart3 size={16} color="#a78bfa" />
+                  <ChartPie size={16} color="#a78bfa" />
                   <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Complaint Categories
+                    What Issues Are Being Reported
                   </h3>
                   <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
                     {d.complaints.length} total complaints
@@ -473,395 +354,63 @@ const CouncillorPortal = () => {
                     'Garbage': '#22c55e', 'Street Lights': '#eab308', 'Roads': '#64748b', 'Other': '#8b5cf6',
                     'Solid Waste Management': '#22c55e',
                   };
+                  const pieData = d.major_categories.map(c => ({
+                    name: c.category_display,
+                    value: c.count,
+                    fill: CATEGORY_COLORS[c.category_display] || '#818cf8',
+                  }));
                   return (
-                    <ResponsiveContainer width="100%" height={Math.max(120, d.major_categories.length * 36)}>
-                      <BarChart data={d.major_categories} layout="vertical" margin={{ top: 4, right: 48, left: 90, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.06)" horizontal={false} />
-                        <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} />
-                        <YAxis dataKey="category_display" type="category" tick={{ fill: '#94a3b8', fontSize: 11 }} width={100} />
-                        <Tooltip content={<ChartTooltip unit="" />} />
-                        <Bar dataKey="count" name="Complaints" radius={[0, 4, 4, 0]}>
-                          {d.major_categories.map(entry => (
-                            <Cell key={entry.category_display} fill={CATEGORY_COLORS[entry.category_display] || '#818cf8'} />
+                    <ResponsiveContainer width="100%" height={260}>
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100}
+                          paddingAngle={3} dataKey="value" nameKey="name">
+                          {pieData.map(entry => (
+                            <Cell key={entry.name} fill={entry.fill} stroke="rgba(5,10,24,0.6)" strokeWidth={2} />
                           ))}
-                        </Bar>
-                      </BarChart>
+                        </Pie>
+                        <Tooltip content={<ChartTooltip unit="" />} />
+                        <Legend
+                          wrapperStyle={{ fontSize: '0.75rem', color: '#94a3b8' }}
+                          iconType="circle"
+                          formatter={(value) => <span style={{ color: '#cbd5e1' }}>{value}</span>}
+                        />
+                      </PieChart>
                     </ResponsiveContainer>
                   );
                 })()}
               </div>
             )}
 
-            {/* ════════════════════════════════════════════════════════════════ */}
-            {/* SECTION 4: Multi-Year Trend Chart (2019-2026) */}
-            {/* ════════════════════════════════════════════════════════════════ */}
-            {(() => {
-              if (!d.ward_metrics_history || d.ward_metrics_history.length === 0) return null;
-              const chartData = d.ward_metrics_history.map(m => ({
-                year: m.year,
-                total: m.total_complaints,
-                isPredicted: false,
-              }));
-              if (d.predicted_data) {
-                [2025, 2026].forEach(yr => {
-                  const p = d.predicted_data[String(yr)];
-                  if (p) {
-                    const existing = chartData.find(d => d.year === yr);
-                    if (existing) {
-                      existing.total = p.predicted_complaints;
-                      existing.isPredicted = true;
-                    } else {
-                      chartData.push({ year: yr, total: p.predicted_complaints, isPredicted: true });
-                    }
-                  }
-                });
-                chartData.sort((a, b) => a.year - b.year);
-              }
-              const hasPredicted = chartData.some(d => d.isPredicted);
-              return (
-              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  <TrendingUp size={16} color="#22c55e" />
-                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Complaint Trend (2019-2026)
-                  </h3>
-                  {hasPredicted && (
-                    <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
-                      Blue = Actual · Orange = ML Predicted
-                    </span>
-                  )}
-                </div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.08)" />
-                    <XAxis dataKey="year" tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <Tooltip content={<ChartTooltip unit=" complaints" />} />
-                    <Line type="monotone" dataKey="total" name="Complaints" stroke="#818cf8" strokeWidth={3}
-                      dot={(props) => {
-                        const isPred = (props.payload?.year || 0) >= 2025;
-                        return (
-                          <circle cx={props.cx} cy={props.cy} r={isPred ? 5 : 4}
-                            fill={isPred ? '#f59e0b' : '#818cf8'} stroke="none" />
-                        );
-                      }}
-                      activeDot={{ r: 6, fill: '#818cf8' }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )})()}
-
-            {/* --- ML Insights / Forecast Card --- */}
-            {d.predictions && (
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(30,27,75,0.4) 0%, rgba(15,23,42,0.6) 100%)',
-                border: '1px solid rgba(129,140,248,0.2)',
-                borderRadius: 16, padding: '1.5rem 2rem', marginBottom: '1.5rem',
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-                  <TrendingUp size={20} color="#818cf8" style={{ filter: 'drop-shadow(0 0 4px rgba(129,140,248,0.4))' }} />
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f8fafc', margin: 0, letterSpacing: '0.02em' }}>
-                    AI Infrastructure Forecast & Insights
-                  </h3>
-                  <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto', fontFamily: 'monospace' }}>
-                    Model: {d.predictions.model_version}
-                  </span>
-                </div>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr', gap: '1.5rem', flexWrap: 'wrap' }}>
-                  {/* Left column: Metrics */}
-                  <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
-                    <div style={{
-                      flex: 1, background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(99,102,241,0.08)',
-                      borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'center'
-                    }}>
-                      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: '0.25rem' }}>
-                        Forecasted Complaints
-                      </div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f8fafc' }}>
-                        {d.predictions.predicted_complaints?.toLocaleString()}
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: '#818cf8', marginTop: '0.2rem' }}>
-                        For {d.predicted_data ? Object.keys(d.predicted_data).sort().pop() : '2026'}
-                      </div>
-                    </div>
-
-                    <div style={{
-                      flex: 1, background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(99,102,241,0.08)',
-                      borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'center'
-                    }}>
-                      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: '0.25rem' }}>
-                        Predicted Risk Level
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{
-                          width: 8, height: 8, borderRadius: '50%',
-                          background: d.predictions.predicted_risk?.toLowerCase() === 'high' ? '#ef4444' : d.predictions.predicted_risk?.toLowerCase() === 'medium' ? '#f59e0b' : '#22c55e'
-                        }} />
-                        <div style={{
-                          fontSize: '1.3rem', fontWeight: 900,
-                          color: d.predictions.predicted_risk?.toLowerCase() === 'high' ? '#ef4444' : d.predictions.predicted_risk?.toLowerCase() === 'medium' ? '#f59e0b' : '#22c55e',
-                          textTransform: 'capitalize'
-                        }}>
-                          {d.predictions.predicted_risk}
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: '#818cf8', marginTop: '0.2rem' }}>
-                        Infrastructure Risk
-                      </div>
-                    </div>
-
-                    {d.focus_facility && (
-                      <div style={{
-                        flex: 1, background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(239,68,68,0.15)',
-                        borderRadius: 12, padding: '1.0rem 0.75rem', display: 'flex', flexDirection: 'column', justifyContent: 'center'
-                      }}>
-                        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#f87171', fontWeight: 700, marginBottom: '0.25rem' }}>
-                          AI Priority Focus
-                        </div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f87171', lineHeight: '1.2' }}>
-                          {d.focus_facility.display_name}
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                          {d.focus_facility.escalation_rate}% escalation rate
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right column: AI Recommendation */}
-                  <div style={{
-                    background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.08)',
-                    borderRadius: 12, padding: '1rem', display: 'flex', gap: '0.75rem'
-                  }}>
-                    <AlertCircle size={20} color="#818cf8" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
-                    <div>
-                      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#818cf8', fontWeight: 700, marginBottom: '0.25rem' }}>
-                        AI Recommendation
-                      </div>
-                      <p style={{ color: '#cbd5e1', fontSize: '0.82rem', lineHeight: '1.45', margin: 0 }}>
-                        {d.predictions.recommendation}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* --- AI Ward Briefing & Action Plan (senior-friendly) --- */}
-            {d.briefing && !d.briefing.error && (
-              <div style={{
-                background: 'linear-gradient(135deg, #0a0f1e 0%, #14192d 100%)',
-                border: '1px solid rgba(129, 140, 248, 0.2)',
-                borderRadius: 16,
-                padding: '1.8rem',
-                marginBottom: '1.5rem',
-              }}>
-                {/* Header */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '0.8rem',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
-                  paddingBottom: '1rem', marginBottom: '1.2rem', flexWrap: 'wrap',
-                }}>
-                  <Sparkles size={24} color="#818cf8" />
-                  <div>
-                    <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-                      AI Ward Briefing
-                    </h3>
-                    <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
-                      {new Date(d.briefing.generated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Executive Summary — big, prominent */}
-                <div style={{
-                  background: 'rgba(99, 102, 241, 0.06)',
-                  borderLeft: '5px solid #818cf8',
-                  padding: '1.2rem 1.4rem',
-                  borderRadius: '0 12px 12px 0',
-                  marginBottom: '1.5rem',
-                }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', color: '#818cf8', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
-                    Quick Summary
-                  </div>
-                  <div style={{ color: '#e2e8f0', fontSize: '1.05rem', fontWeight: 600, lineHeight: '1.5' }}>
-                    {d.briefing.summary}
-                  </div>
-                </div>
-
-                {/* Section cards — stacked, simple */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                  {[
-                    {
-                      icon: <FileText size={18} color="#818cf8" />,
-                      title: 'Ward Health',
-                      content: d.briefing.sections.header,
-                      borderColor: '#818cf8',
-                    },
-                    {
-                      icon: <TrendingUp size={18} color="#a78bfa" />,
-                      title: "What's Happening",
-                      content: d.briefing.sections.whats_happening,
-                      borderColor: '#a78bfa',
-                    },
-                    {
-                      icon: <AlertCircle size={18} color="#fb7185" />,
-                      title: 'Forecast',
-                      content: d.briefing.sections.forecast,
-                      borderColor: '#fb7185',
-                    },
-                  ].map(card => (
-                    <div key={card.title} style={{
-                      background: 'rgba(15, 23, 42, 0.5)',
-                      border: '1px solid rgba(255,255,255,0.04)',
-                      borderLeft: `5px solid ${card.borderColor}`,
-                      borderRadius: 12,
-                      padding: '1.1rem 1.3rem',
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
-                        {card.icon}
-                        <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
-                          {card.title}
-                        </h4>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {card.content && card.content.split('\n').map((line, i) => (
-                          <div key={i} style={{ display: 'flex', gap: '0.5rem' }}>
-                            <span style={{ color: card.borderColor, fontSize: '1rem', lineHeight: '1.4' }}>•</span>
-                            <span style={{ color: '#cbd5e1', fontSize: '0.95rem', lineHeight: '1.5' }}>
-                              {line}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Action Items — big, touch-friendly */}
-                <div style={{
-                  background: 'rgba(15, 23, 42, 0.4)',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  borderRadius: 14, padding: '1.3rem',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <ListTodo size={20} color="#818cf8" />
-                      <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
-                        Action Items
-                      </h4>
-                    </div>
-                    <span style={{
-                      fontSize: '0.8rem', background: 'rgba(99,102,241,0.15)', color: '#a5b4fc',
-                      padding: '0.25rem 0.75rem', borderRadius: 100, fontWeight: 700,
-                    }}>
-                      {d.briefing.sections.action_items ? (
-                        `${d.briefing.sections.action_items.filter((_, i) => checkedActions[i]).length} / ${d.briefing.sections.action_items.length}`
-                      ) : '0 / 0'}
-                    </span>
-                  </div>
-
-                  {d.briefing.sections.action_items && d.briefing.sections.action_items.length > 0 && (
-                    <>
-                      <div style={{
-                        width: '100%', height: 8, background: 'rgba(255,255,255,0.04)',
-                        borderRadius: 4, marginBottom: '1rem', overflow: 'hidden',
-                      }}>
-                        <div style={{
-                          height: '100%', borderRadius: 4,
-                          width: `${(d.briefing.sections.action_items.filter((_, i) => checkedActions[i]).length / d.briefing.sections.action_items.length) * 100}%`,
-                          background: 'linear-gradient(90deg, #818cf8, #c084fc)',
-                          transition: 'width 0.4s',
-                        }} />
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-                        {d.briefing.sections.action_items.map((item, idx) => {
-                          const isChecked = !!checkedActions[idx];
-                          const lower = item.toLowerCase();
-                          const isEmergency = lower.includes('immediately') || lower.includes('spike') || (lower.includes('low') && !lower.includes('normal'));
-                          const isImportant = lower.includes('rising') || lower.includes('needs') || lower.includes('shift') || lower.includes('risk');
-                          const priorityColor = isEmergency ? '#ef4444' : isImportant ? '#f59e0b' : '#3b82f6';
-                          const priorityLabel = isEmergency ? 'EMERGENCY' : isImportant ? 'IMPORTANT' : 'KEEP WATCH';
-                          return (
-                            <div
-                              key={idx}
-                              onClick={() => toggleAction(idx)}
-                              style={{
-                                display: 'flex', alignItems: 'flex-start', gap: '0.8rem',
-                                background: isChecked ? 'rgba(255,255,255,0.02)' : isEmergency ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.02)',
-                                border: isChecked ? '1px solid rgba(255,255,255,0.04)' : isEmergency ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(255,255,255,0.06)',
-                                borderLeft: isEmergency && !isChecked ? '4px solid #ef4444' : '4px solid transparent',
-                                borderRadius: 10, padding: '0.9rem 1rem',
-                                cursor: 'pointer', transition: 'all 0.15s',
-                                opacity: isChecked ? 0.4 : 1,
-                              }}
-                            >
-                              <div style={{
-                                width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: '0.05rem',
-                                border: isChecked ? '1px solid #10b981' : '1px solid #64748b',
-                                background: isChecked ? '#10b981' : 'transparent',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              }}>
-                                {isChecked && (
-                                  <svg width="12" height="10" viewBox="0 0 10 8" fill="none">
-                                    <path d="M1.5 4L3.8 6.3L8.5 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                )}
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <div style={{
-                                  fontSize: '0.95rem',
-                                  color: isChecked ? '#64748b' : '#e2e8f0',
-                                  textDecoration: isChecked ? 'line-through' : 'none',
-                                  lineHeight: '1.5',
-                                  fontWeight: isEmergency ? 600 : 400,
-                                }}>
-                                  {item}
-                                </div>
-                                <span style={{
-                                  fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase',
-                                  padding: '0.1rem 0.45rem', borderRadius: 3,
-                                  background: isEmergency ? 'rgba(239,68,68,0.15)' : isImportant ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
-                                  color: priorityColor,
-                                  display: 'inline-block', marginTop: '0.3rem',
-                                }}>
-                                  {priorityLabel}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ════════════════════════════════════════════════════════════════ */}
-            {/* SECTION 5: Complaint Map with Hotspots */}
-            {/* ════════════════════════════════════════════════════════════════ */}
-            {d.complaints.some(c => c.latitude && c.longitude) && (
+            {/* ── Complaint Map with Hotspots ── */}
               <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <MapPin size={16} color="#22c55e" />
                   <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Complaint Map
+                    Where Complaints Are Located
                   </h3>
+                  {(() => {
+                    const marked = d.complaints.filter(c => c.latitude != null && c.longitude != null);
+                    return marked.length > 0 ? (
+                      <span style={{ fontSize: '0.72rem', color: '#22c55e', marginLeft: 'auto' }}>
+                        {marked.length} pin{marked.length > 1 ? 's' : ''} on map
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto' }}>
+                        No location data — complaints lack coordinates
+                      </span>
+                    );
+                  })()}
                   {hotspots.length > 0 && (
-                    <span style={{ fontSize: '0.72rem', color: '#f59e0b', marginLeft: 'auto' }}>
-                      {hotspots.length} hotspot{hotspots.length > 1 ? 's' : ''} detected
+                    <span style={{ fontSize: '0.72rem', color: '#f59e0b', marginLeft: '0.5rem' }}>
+                      · {hotspots.length} hotspot{hotspots.length > 1 ? 's' : ''} detected
                     </span>
                   )}
                 </div>
                 <MapContainer center={[19.076, 72.877]} zoom={12} style={{ height: 380, borderRadius: 12, zIndex: 1 }}
                   key={d.ward.ward_name}>
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  {d.complaints.filter(c => c.latitude && c.longitude).map(c => (
-                    <Marker key={c.id} position={[c.latitude, c.longitude]} icon={createPinIcon(c.category)}>
+                  {d.complaints.filter(c => c.latitude != null && c.longitude != null).map(c => (
+                    <Marker key={c.id} position={[Number(c.latitude), Number(c.longitude)]} icon={createPinIcon(c.category)}>
                       <Popup>
                         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '0.8rem', maxWidth: 220 }}>
                           <strong>{c.category}</strong><br />
@@ -878,6 +427,13 @@ const CouncillorPortal = () => {
                       radius={100} pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.15, weight: 2 }} />
                   ))}
                 </MapContainer>
+                {d.complaints.filter(c => c.latitude != null && c.longitude != null).length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '1rem', color: '#64748b', fontSize: '0.85rem' }}>
+                    <MapPin size={24} style={{ opacity: 0.3, margin: '0 auto 0.4rem' }} />
+                    Complaints need location data to appear as pins on this map.<br />
+                    Use the <strong>Detect My Location</strong> option when submitting complaints.
+                  </div>
+                )}
                 {hotspots.length > 0 && (
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
                     {hotspots.map(h => (
@@ -888,21 +444,19 @@ const CouncillorPortal = () => {
                   </div>
                 )}
               </div>
-            )}
 
-            {/* --- Complaint List --- */}
+            {/* ── Complaint List ── */}
             <div style={{
               background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)',
-              borderRadius: 16, overflow: 'hidden',
+              borderRadius: 16, overflow: 'hidden', marginBottom: '1.5rem',
             }}>
-              {/* Filter bar */}
               <div style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 padding: '1rem 1.5rem', borderBottom: '1px solid rgba(99,102,241,0.08)',
                 background: 'rgba(5,10,24,0.3)',
               }}>
                 <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
-                  Ward Complaints
+                  All Complaints
                 </h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0f172a', padding: '0.4rem 0.8rem', borderRadius: 8, border: '1px solid #1e293b' }}>
                   <Filter size={14} color="#64748b" />
@@ -1014,6 +568,579 @@ const CouncillorPortal = () => {
                 </div>
               )}
             </div>
+
+            {/* ── Health Score Gauge + Ward Rankings ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <BarChart3 size={16} color="#818cf8" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Ward Health Score
+                  </h3>
+                </div>
+                {d.health_score != null ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ width: 140, height: 140 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadialBarChart cx="50%" cy="50%" innerRadius="60%" outerRadius="100%" barSize={16}
+                          data={[{ name: 'Score', value: Math.round(d.health_score), fill: scoreColor(d.health_score) }]}
+                          startAngle={180} endAngle={0}>
+                          <RadialBar dataKey="value" cornerRadius={8} background={{ fill: '#1e293b' }} />
+                          <text x="70" y="75" textAnchor="middle" dominantBaseline="middle" fill="#f8fafc" fontSize={28} fontWeight={900}>
+                            {Math.round(d.health_score)}
+                          </text>
+                          <text x="70" y="95" textAnchor="middle" dominantBaseline="middle" fill="#64748b" fontSize={11} fontWeight={600}>
+                            / 100
+                          </text>
+                        </RadialBarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                        <span style={{ padding: '0.2rem 0.6rem', borderRadius: 100, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', background: d.health_label === 'Good' ? 'rgba(34,197,94,0.15)' : d.health_label === 'Moderate' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)', color: d.health_label === 'Good' ? '#4ade80' : d.health_label === 'Moderate' ? '#fbbf24' : '#f87171' }}>
+                          {d.health_label}
+                        </span>
+                        {d.ward_rankings && (
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                            #{d.ward_rankings.health_score_rank} of {d.ward_rankings.total_wards} wards
+                          </span>
+                        )}
+                      </div>
+                      {d.health_breakdown && d.health_breakdown.deliberation_score != null && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          {[
+                            { label: 'Complaint Volume', value: Math.round(d.health_breakdown.complaint_score * 100), color: '#818cf8' },
+                            { label: 'Resolution Speed', value: Math.round(d.health_breakdown.resolution_score * 100), color: '#a78bfa' },
+                            { label: 'Civic Engagement', value: Math.round(d.health_breakdown.deliberation_score * 100), color: '#c084fc' },
+                          ].map(s => (
+                            <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.7rem', color: '#94a3b8', width: 100, flexShrink: 0 }}>{s.label}</span>
+                              <div style={{ flex: 1, height: 6, background: '#1e293b', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ width: `${s.value}%`, height: '100%', background: s.color, borderRadius: 3, transition: 'width 0.5s' }} />
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: s.color, fontWeight: 700, width: 28, textAlign: 'right' }}>{s.value}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ color: '#64748b', fontSize: '0.85rem' }}>No health score available</p>
+                )}
+              </div>
+
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <Award size={16} color="#fbbf24" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Ward Rankings & Trends
+                  </h3>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  {[
+                    { label: 'Health Score', rank: d.ward_rankings?.health_score_rank, total: d.ward_rankings?.total_wards, color: '#818cf8', bestIs: 'high' },
+                    { label: 'Complaint Volume', rank: d.ward_rankings?.complaints_rank, total: d.ward_rankings?.total_wards, color: '#f87171', bestIs: 'low' },
+                    { label: 'Resolution Speed', rank: d.ward_rankings?.resolution_rank, total: d.ward_rankings?.total_wards, color: '#fbbf24', bestIs: 'low' },
+                    { label: 'Civic Engagement', rank: d.ward_rankings?.deliberation_rank, total: d.ward_rankings?.total_wards, color: '#4ade80', bestIs: 'high' },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: 'rgba(5,10,24,0.3)', borderRadius: 10, padding: '0.75rem', border: '1px solid rgba(99,102,241,0.06)' }}>
+                      <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
+                        {item.label}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                        <span style={{ fontSize: '1.2rem', fontWeight: 900, color: item.color }}>
+                          {item.rank ? `#${item.rank}` : '--'}
+                        </span>
+                        {item.total && (
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>of {item.total}</span>
+                        )}
+                      </div>
+                      {d.yoy_change && item.label === 'Health Score' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.2rem' }}>
+                          <TrendArrow value={d.yoy_change.health_score_change} />
+                          <span style={{ fontSize: '0.68rem', color: d.yoy_change.health_score_change > 0 ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                            {d.yoy_change.health_score_change > 0 ? '+' : ''}{d.yoy_change.health_score_change} pts
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Your Ward vs City Average ── */}
+            {d.ward_metrics_history && d.ward_metrics_history.length > 0 && d.city_averages && (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <BarChart3 size={16} color="#818cf8" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Your Ward vs City Average
+                  </h3>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
+                    Latest year: {d.metrics_year}
+                  </span>
+                </div>
+                {(() => {
+                  const latest = d.ward_metrics_history[d.ward_metrics_history.length - 1];
+                  if (!latest) return null;
+
+                  const fmt = (v) => {
+                    if (v == null) return '--';
+                    return typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : v;
+                  };
+
+                  const rows = [
+                    { label: 'Health Score', ward: latest.health_score, city: d.city_averages.health_score },
+                    { label: 'Complaints / Capita', ward: latest.per_capita_complaints, city: d.city_averages.per_capita_complaints },
+                    { label: 'Resolution Days', ward: latest.avg_resolution_days, city: d.city_averages.avg_resolution_days },
+                    { label: 'Deliberations / Capita', ward: latest.per_capita_deliberations, city: d.city_averages.per_capita_deliberations },
+                  ];
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {rows.map(r => {
+                        const wardVal = r.ward;
+                        const cityVal = r.city;
+                        const belowAvg = wardVal != null && cityVal != null ? wardVal < cityVal : null;
+                        const barPct = wardVal != null && cityVal != null && cityVal !== 0
+                          ? Math.min(Math.abs(wardVal / cityVal), 3)
+                          : 0;
+                        return (
+                          <div key={r.label} style={{
+                            display: 'grid', gridTemplateColumns: '140px 1fr 1fr 40px',
+                            gap: '0.75rem', alignItems: 'center',
+                            padding: '0.55rem 0.8rem', borderRadius: 10,
+                            background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(99,102,241,0.06)',
+                          }}>
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{r.label}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f1f5f9', minWidth: 48 }}>
+                                {fmt(wardVal)}
+                              </span>
+                              <div style={{
+                                flex: 1, height: 6, background: '#1e293b', borderRadius: 3, overflow: 'hidden',
+                              }}>
+                                <div style={{
+                                  width: `${Math.min(barPct * 100, 100)}%`,
+                                  height: '100%', borderRadius: 3,
+                                  background: belowAvg === true ? '#22c55e' : belowAvg === false ? '#ef4444' : '#475569',
+                                  transition: 'width 0.4s',
+                                }} />
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span style={{ fontSize: '0.82rem', color: '#64748b' }}>{fmt(cityVal)}</span>
+                              <span style={{ fontSize: '0.65rem', color: '#475569' }}>avg</span>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                              {belowAvg === true ? (
+                                <ArrowDown size={14} color="#22c55e" />
+                              ) : belowAvg === false ? (
+                                <ArrowUp size={14} color="#ef4444" />
+                              ) : (
+                                <Minus size={14} color="#64748b" />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* ── Multi-Year Trend Chart ── */}
+            {(() => {
+              if (!d.ward_metrics_history || d.ward_metrics_history.length === 0) return null;
+              const chartData = d.ward_metrics_history.map(m => ({
+                year: m.year,
+                total: m.total_complaints,
+                isPredicted: false,
+              }));
+              if (d.predicted_data) {
+                [2025, 2026].forEach(yr => {
+                  const p = d.predicted_data[String(yr)];
+                  if (p) {
+                    const existing = chartData.find(d => d.year === yr);
+                    if (existing) {
+                      existing.total = p.predicted_complaints;
+                      existing.isPredicted = true;
+                    } else {
+                      chartData.push({ year: yr, total: p.predicted_complaints, isPredicted: true });
+                    }
+                  }
+                });
+                chartData.sort((a, b) => a.year - b.year);
+              }
+              const hasPredicted = chartData.some(d => d.isPredicted);
+              return (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <TrendingUp size={16} color="#22c55e" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Complaint Trend (2019-2026)
+                  </h3>
+                  {hasPredicted && (
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
+                      Blue = Actual · Orange = ML Predicted
+                    </span>
+                  )}
+                </div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.08)" />
+                    <XAxis dataKey="year" tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <Tooltip content={<ChartTooltip unit=" complaints" />} />
+                    <Line type="monotone" dataKey="total" name="Complaints" stroke="#818cf8" strokeWidth={3}
+                      dot={(props) => {
+                        const isPred = (props.payload?.year || 0) >= 2025;
+                        return (
+                          <circle cx={props.cx} cy={props.cy} r={isPred ? 5 : 4}
+                            fill={isPred ? '#f59e0b' : '#818cf8'} stroke="none" />
+                        );
+                      }}
+                      activeDot={{ r: 6, fill: '#818cf8' }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )})()}
+
+            {/* ── Rising Issues (ML Anomaly Detection) ── */}
+            {d.failing_categories && d.failing_categories.length > 0 && (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <TrendingUp size={16} color="#ef4444" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f87171', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Categories on the Rise
+                  </h3>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto' }}>
+                    3-year growth · ML anomaly detection
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {d.failing_categories.filter(c => c.recent_3yr_growth_pct > 5).slice(0, 5).map(c => (
+                    <div key={c.issue} style={{
+                      display: 'grid', gridTemplateColumns: '1fr auto auto',
+                      gap: '0.75rem', alignItems: 'center',
+                      padding: '0.55rem 0.8rem', borderRadius: 10,
+                      background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(239,68,68,0.08)',
+                    }}>
+                      <span style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 600 }}>{c.issue}</span>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: c.recent_3yr_growth_pct > 20 ? '#ef4444' : '#f59e0b' }}>
+                        +{c.recent_3yr_growth_pct}%
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                        ~{c.projected_next?.toLocaleString()} next
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── ML Insights / Forecast Card ── */}
+            {d.predictions && (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(30,27,75,0.4) 0%, rgba(15,23,42,0.6) 100%)',
+                border: '1px solid rgba(129,140,248,0.2)',
+                borderRadius: 16, padding: '1.5rem 2rem', marginBottom: '1.5rem',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+                  <TrendingUp size={20} color="#818cf8" style={{ filter: 'drop-shadow(0 0 4px rgba(129,140,248,0.4))' }} />
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f8fafc', margin: 0, letterSpacing: '0.02em' }}>
+                    AI Infrastructure Forecast & Insights
+                  </h3>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto', fontFamily: 'monospace' }}>
+                    Model: {d.predictions.model_version}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr', gap: '1.5rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+                    <div style={{
+                      flex: 1, background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(99,102,241,0.08)',
+                      borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'center'
+                    }}>
+                      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: '0.25rem' }}>
+                        Forecasted Complaints
+                      </div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f8fafc' }}>
+                        {d.predictions.predicted_complaints?.toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#818cf8', marginTop: '0.2rem' }}>
+                        For {d.predicted_data ? Object.keys(d.predicted_data).sort().pop() : '2026'}
+                      </div>
+                      {(() => {
+                        const years = d.predicted_data ? Object.keys(d.predicted_data).sort() : [];
+                        const latestYear = years.length ? years[years.length - 1] : null;
+                        const pd = latestYear ? d.predicted_data[latestYear] : null;
+                        if (!pd || pd.predicted_complaints_lower == null || pd.predicted_complaints_upper == null) return null;
+                        return (
+                          <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(99,102,241,0.1)' }}>
+                            <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: '0.2rem' }}>
+                              ML Confidence Range
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                              {pd.predicted_complaints_lower.toLocaleString()} – {pd.predicted_complaints_upper.toLocaleString()}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <div style={{
+                      flex: 1, background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(99,102,241,0.08)',
+                      borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'center'
+                    }}>
+                      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: '0.25rem' }}>
+                        Predicted Risk Level
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{
+                          width: 8, height: 8, borderRadius: '50%',
+                          background: d.predictions.predicted_risk?.toLowerCase() === 'high' ? '#ef4444' : d.predictions.predicted_risk?.toLowerCase() === 'medium' ? '#f59e0b' : '#22c55e'
+                        }} />
+                        <div style={{
+                          fontSize: '1.3rem', fontWeight: 900,
+                          color: d.predictions.predicted_risk?.toLowerCase() === 'high' ? '#ef4444' : d.predictions.predicted_risk?.toLowerCase() === 'medium' ? '#f59e0b' : '#22c55e',
+                          textTransform: 'capitalize'
+                        }}>
+                          {d.predictions.predicted_risk}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#818cf8', marginTop: '0.2rem' }}>
+                        Infrastructure Risk
+                      </div>
+                    </div>
+
+                    {d.focus_facility && (
+                      <div style={{
+                        flex: 1, background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(239,68,68,0.15)',
+                        borderRadius: 12, padding: '1.0rem 0.75rem', display: 'flex', flexDirection: 'column', justifyContent: 'center'
+                      }}>
+                        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#f87171', fontWeight: 700, marginBottom: '0.25rem' }}>
+                          AI Priority Focus
+                        </div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f87171', lineHeight: '1.2' }}>
+                          {d.focus_facility.display_name}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                          {d.focus_facility.escalation_rate}% escalation rate
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{
+                    background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.08)',
+                    borderRadius: 12, padding: '1rem', display: 'flex', gap: '0.75rem'
+                  }}>
+                    <AlertCircle size={20} color="#818cf8" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                    <div>
+                      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#818cf8', fontWeight: 700, marginBottom: '0.25rem' }}>
+                        AI Recommendation
+                      </div>
+                      <p style={{ color: '#cbd5e1', fontSize: '0.82rem', lineHeight: '1.45', margin: 0 }}>
+                        {d.predictions.recommendation}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── AI Ward Briefing & Action Plan ── */}
+            {d.briefing && !d.briefing.error && (
+              <div style={{
+                background: 'linear-gradient(135deg, #0a0f1e 0%, #14192d 100%)',
+                border: '1px solid rgba(129, 140, 248, 0.2)',
+                borderRadius: 16,
+                padding: '1.8rem',
+                marginBottom: '1.5rem',
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.8rem',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  paddingBottom: '1rem', marginBottom: '1.2rem', flexWrap: 'wrap',
+                }}>
+                  <Sparkles size={24} color="#818cf8" />
+                  <div>
+                    <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
+                      AI Ward Briefing
+                    </h3>
+                    <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
+                      {new Date(d.briefing.generated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'rgba(99, 102, 241, 0.06)',
+                  borderLeft: '5px solid #818cf8',
+                  padding: '1.2rem 1.4rem',
+                  borderRadius: '0 12px 12px 0',
+                  marginBottom: '1.5rem',
+                }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', color: '#818cf8', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>
+                    Quick Summary
+                  </div>
+                  <div style={{ color: '#e2e8f0', fontSize: '1.05rem', fontWeight: 600, lineHeight: '1.5' }}>
+                    {d.briefing.summary}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                  {[
+                    {
+                      icon: <FileText size={18} color="#818cf8" />,
+                      title: 'Ward Health',
+                      content: d.briefing.sections.header,
+                      borderColor: '#818cf8',
+                    },
+                    {
+                      icon: <TrendingUp size={18} color="#a78bfa" />,
+                      title: "What's Happening",
+                      content: d.briefing.sections.whats_happening,
+                      borderColor: '#a78bfa',
+                    },
+                    {
+                      icon: <AlertCircle size={18} color="#fb7185" />,
+                      title: 'Forecast',
+                      content: d.briefing.sections.forecast,
+                      borderColor: '#fb7185',
+                    },
+                  ].map(card => (
+                    <div key={card.title} style={{
+                      background: 'rgba(15, 23, 42, 0.5)',
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      borderLeft: `5px solid ${card.borderColor}`,
+                      borderRadius: 12,
+                      padding: '1.1rem 1.3rem',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                        {card.icon}
+                        <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
+                          {card.title}
+                        </h4>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {card.content && card.content.split('\n').map((line, i) => (
+                          <div key={i} style={{ display: 'flex', gap: '0.5rem' }}>
+                            <span style={{ color: card.borderColor, fontSize: '1rem', lineHeight: '1.4' }}>•</span>
+                            <span style={{ color: '#cbd5e1', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                              {line}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{
+                  background: 'rgba(15, 23, 42, 0.4)',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  borderRadius: 14, padding: '1.3rem',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <ListTodo size={20} color="#818cf8" />
+                      <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
+                        Action Items
+                      </h4>
+                    </div>
+                    <span style={{
+                      fontSize: '0.8rem', background: 'rgba(99,102,241,0.15)', color: '#a5b4fc',
+                      padding: '0.25rem 0.75rem', borderRadius: 100, fontWeight: 700,
+                    }}>
+                      {d.briefing.sections.action_items ? (
+                        `${d.briefing.sections.action_items.filter((_, i) => checkedActions[i]).length} / ${d.briefing.sections.action_items.length}`
+                      ) : '0 / 0'}
+                    </span>
+                  </div>
+
+                  {d.briefing.sections.action_items && d.briefing.sections.action_items.length > 0 && (
+                    <>
+                      <div style={{
+                        width: '100%', height: 8, background: 'rgba(255,255,255,0.04)',
+                        borderRadius: 4, marginBottom: '1rem', overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          height: '100%', borderRadius: 4,
+                          width: `${(d.briefing.sections.action_items.filter((_, i) => checkedActions[i]).length / d.briefing.sections.action_items.length) * 100}%`,
+                          background: 'linear-gradient(90deg, #818cf8, #c084fc)',
+                          transition: 'width 0.4s',
+                        }} />
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                        {d.briefing.sections.action_items.map((item, idx) => {
+                          const isChecked = !!checkedActions[idx];
+                          const lower = item.toLowerCase();
+                          const isEmergency = lower.includes('immediately') || lower.includes('spike') || (lower.includes('low') && !lower.includes('normal'));
+                          const isImportant = lower.includes('rising') || lower.includes('needs') || lower.includes('shift') || lower.includes('risk');
+                          const priorityColor = isEmergency ? '#ef4444' : isImportant ? '#f59e0b' : '#3b82f6';
+                          const priorityLabel = isEmergency ? 'EMERGENCY' : isImportant ? 'IMPORTANT' : 'KEEP WATCH';
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => toggleAction(idx)}
+                              style={{
+                                display: 'flex', alignItems: 'flex-start', gap: '0.8rem',
+                                background: isChecked ? 'rgba(255,255,255,0.02)' : isEmergency ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.02)',
+                                border: isChecked ? '1px solid rgba(255,255,255,0.04)' : isEmergency ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                                borderLeft: isEmergency && !isChecked ? '4px solid #ef4444' : '4px solid transparent',
+                                borderRadius: 10, padding: '0.9rem 1rem',
+                                cursor: 'pointer', transition: 'all 0.15s',
+                                opacity: isChecked ? 0.4 : 1,
+                              }}
+                            >
+                              <div style={{
+                                width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: '0.05rem',
+                                border: isChecked ? '1px solid #10b981' : '1px solid #64748b',
+                                background: isChecked ? '#10b981' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                {isChecked && (
+                                  <svg width="12" height="10" viewBox="0 0 10 8" fill="none">
+                                    <path d="M1.5 4L3.8 6.3L8.5 1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{
+                                  fontSize: '0.95rem',
+                                  color: isChecked ? '#64748b' : '#e2e8f0',
+                                  textDecoration: isChecked ? 'line-through' : 'none',
+                                  lineHeight: '1.5',
+                                  fontWeight: isEmergency ? 600 : 400,
+                                }}>
+                                  {item}
+                                </div>
+                                <span style={{
+                                  fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase',
+                                  padding: '0.1rem 0.45rem', borderRadius: 3,
+                                  background: isEmergency ? 'rgba(239,68,68,0.15)' : isImportant ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)',
+                                  color: priorityColor,
+                                  display: 'inline-block', marginTop: '0.3rem',
+                                }}>
+                                  {priorityLabel}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         ) : error ? (
           <div style={{ textAlign: 'center', color: '#f87171', padding: '3rem' }}>{error}</div>

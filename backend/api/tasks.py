@@ -121,3 +121,11 @@ def retrain_models():
     train_forecast_model(X, y_complaints)
     train_clustering(X)
     return {"status": "success", "rows": len(X)}
+
+
+@shared_task
+def generate_weekly_pdf_reports():
+    """Generate PDF reports for all wards and store in media/reports/."""
+    from api.services.report_generator import generate_all_wards_reports
+    paths = generate_all_wards_reports()
+    return {"status": "success", "reports_generated": len(paths)}

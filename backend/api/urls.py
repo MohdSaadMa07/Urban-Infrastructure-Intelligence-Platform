@@ -5,8 +5,11 @@ from .views import (
     submit_complaint, list_complaints, councillors,
     get_complaint, update_complaint_status, trend_data,
     councillor_ward_dashboard, complaint_hotspots,
+    public_wards, public_health_summary, public_config,
+    download_ward_report,
 )
 from .auth_views import register, login_view, profile, logout_view
+from .twilio_views import whatsapp_webhook
 from .models import Ward
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -33,6 +36,16 @@ urlpatterns = [
     path('hotspots/', complaint_hotspots, name='complaint-hotspots'),
     path('wards/', wards_list, name='wards-list'),
     path('councillor/dashboard/', councillor_ward_dashboard, name='councillor-dashboard'),
+    # Public dashboard endpoints (no auth)
+    path('public/wards/', public_wards, name='public-wards'),
+    path('public/summary/', public_health_summary, name='public-health-summary'),
+    # Public config (WhatsApp number, etc.)
+    path('public/config/', public_config, name='public-config'),
+    # Twilio WhatsApp webhook
+    path('twilio/webhook/', whatsapp_webhook, name='twilio-webhook'),
+    # PDF report download
+    path('reports/download/', download_ward_report, name='download-ward-report'),
+    # Auth
     path('auth/register/', register, name='auth-register'),
     path('auth/login/', login_view, name='auth-login'),
     path('auth/login/refresh/', TokenRefreshView.as_view(), name='auth-refresh'),

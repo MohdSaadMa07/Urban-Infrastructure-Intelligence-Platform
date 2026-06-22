@@ -76,6 +76,9 @@ class Complaint(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
     created_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    sender_phone = models.CharField(max_length=15, null=True, blank=True)
+    source = models.CharField(max_length=20, default='portal',
+        choices=[('portal', 'Web Portal'), ('whatsapp', 'WhatsApp')])
 
     class Meta:
         ordering = ['-created_at']

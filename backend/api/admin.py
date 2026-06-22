@@ -37,6 +37,6 @@ class PortalMetricsAdmin(admin.ModelAdmin):
 
 @admin.register(Complaint)
 class ComplaintAdmin(admin.ModelAdmin):
-    list_display = ('id', 'category', 'ward', 'status', 'created_at')
-    list_filter = ('status', 'category', 'ward')
-    search_fields = ('description', 'ward__ward_name')
+    list_display = ('id', 'category', 'ward', 'status', 'source', 'sender_phone', 'created_at')
+    list_filter = ('status', 'category', 'ward', 'source')
+    search_fields = ('description', 'ward__ward_name', 'sender_phone')

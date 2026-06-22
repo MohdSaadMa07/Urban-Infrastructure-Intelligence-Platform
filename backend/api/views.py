@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.contrib.gis.geos import Point
 from api.models import Ward, CivicMetrics, Complaint
@@ -730,4 +730,120 @@ def complaint_hotspots(request):
             'count': data['count'],
         })
 
-    return Response(result)
+    return Response(result)
+
+
+# ── Public Dashboard (no auth) ───────────────────────────────────────────
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def public_wards(request):
+    """
+    Simplified ward overview for the public dashboard.
+    Returns health label, complaint counts, and a couple headline metrics.
+    No auth required.
+    """
+    year = request.GET.get('year')
+    wards = Ward.objects.all().order_by('ward_name')
+
+    results = []
+    for ward in wards:
+        qs = ward.metrics.all()
+        if year:
+            qs = qs.filter(year=int(year))
+        m = qs.order_by('-year').first()
+
+        health = compute_health_score(m) if m else None
+
+        complaint_count = ward.complaints.filter(source='portal').count()
+        results.append({
+            'ward_no': ward.ward_no,
+            'ward_name': ward.ward_name,
+            'year': m.year if m else None,
+            'health_score': health['score'] if health else None,
+            'health_label': health['label'] if health else 'No Data',
+            'total_complaints': m.total_complaints if m else 0,
+            'avg_resolution_days': m.avg_resolution_days if m else None,
+            'recent_complaints': complaint_count,
+        })
+
+    return Response(results)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def public_health_summary(request):
+    """
+    Return a city-wide summary for the public landing:
+    - total complaints (all wards)
+    - average health score
+    - best / worst ward names
+    """
+    from django.db.models import Avg
+    all_wards = Ward.objects.all()
+    health_scores = []
+    best = worst = None
+    for w in all_wards:
+        m = w.metrics.order_by('-year').first()
+        if m:
+            h = compute_health_score(m)
+            health_scores.append({'ward': w.ward_name, 'score': h['score'], 'label': h['label']})
+
+    total_complaints = sum(
+        (w.metrics.order_by('-year').first().total_complaints if w.metrics.order_by('-year').first() else 0)
+        for w in all_wards
+    )
+
+    if health_scores:
+        avg_health = round(sum(s['score'] for s in health_scores) / len(health_scores), 1)
+        best = max(health_scores, key=lambda x: x['score'])
+        worst = min(health_scores, key=lambda x: x['score'])
+    else:
+        avg_health = None
+
+    return Response({
+        'total_complaints': total_complaints,
+        'average_health_score': avg_health,
+        'best_ward': best,
+        'worst_ward': worst,
+        'wards_count': len(all_wards),
+    })
+
+
+# ── Public Config ───────────────────────────────────────────────────────
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def public_config(request):
+    from django.conf import settings
+    number = settings.TWILIO_WHATSAPP_NUMBER.replace('whatsapp:', '').strip()
+    return Response({
+        'whatsapp_number': number,
+        'whatsapp_link': f'https://wa.me/{number.replace("+", "")}?text=Hello',
+    })
+
+
+# ── PDF Report Download ─────────────────────────────────────────────────
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_ward_report(request):
+    """Generate and return a PDF report for the councillor's ward."""
+    from api.services.report_generator import generate_ward_report
+    from django.http import FileResponse
+    profile = request.user.profile
+    if profile.role != 'councillor':
+        return Response({'error': 'Councillor access required.'}, status=403)
+
+    ward_name = request.GET.get('ward') or (profile.ward.ward_name if profile.ward else None)
+    if not ward_name:
+        return Response({'error': 'No ward specified.'}, status=400)
+
+    filepath = generate_ward_report(ward_name)
+    if not filepath or not filepath.exists():
+        return Response({'error': 'Report could not be generated.'}, status=500)
+
+    return FileResponse(open(filepath, 'rb'), as_attachment=True, filename=filepath.name)
