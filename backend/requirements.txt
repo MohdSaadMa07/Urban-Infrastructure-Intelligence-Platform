@@ -10,4 +10,4 @@ python-dotenv==1.2.2
 redis==8.0.0
 dj-database-url==2.3.0
 twilio==9.10.9
-whitenoise==7.0.0
+whitenoise==6.12.0
