@@ -9,6 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
+        ('api', '0000_postgis_extension'),
     ]
 
     operations = [
