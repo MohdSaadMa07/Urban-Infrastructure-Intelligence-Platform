@@ -1,6 +1,6 @@
 """
-Seed realistic complaints for wards A, B, C, L with proper lat/lng
-so they appear on the councillor portal complaint map.
+Seed realistic complaints for all wards with proper lat/lng
+so they appear on the complaint map and councillor portal.
 """
 import random
 from datetime import datetime, timedelta
@@ -8,37 +8,55 @@ from django.core.management.base import BaseCommand
 from api.models import Ward, Complaint
 
 WARD_BOUNDS = {
-    'A': {'lat': (18.905, 18.940), 'lng': (72.810, 72.840)},
-    'B': {'lat': (18.940, 18.975), 'lng': (72.810, 72.835)},
-    'C': {'lat': (18.965, 19.000), 'lng': (72.810, 72.840)},
-    'L': {'lat': (19.050, 19.100), 'lng': (72.860, 72.900)},
+    'A':   {'lat': (18.905, 18.940), 'lng': (72.810, 72.840)},
+    'B':   {'lat': (18.940, 18.975), 'lng': (72.810, 72.835)},
+    'C':   {'lat': (18.965, 19.000), 'lng': (72.810, 72.840)},
+    'D':   {'lat': (18.930, 18.970), 'lng': (72.790, 72.820)},
+    'E':   {'lat': (18.970, 19.010), 'lng': (72.820, 72.850)},
+    'F/N': {'lat': (19.020, 19.060), 'lng': (72.830, 72.870)},
+    'F/S': {'lat': (19.000, 19.040), 'lng': (72.820, 72.860)},
+    'G/N': {'lat': (19.040, 19.080), 'lng': (72.840, 72.880)},
+    'G/S': {'lat': (19.040, 19.080), 'lng': (72.820, 72.850)},
+    'H/E': {'lat': (19.100, 19.140), 'lng': (72.840, 72.880)},
+    'H/W': {'lat': (19.100, 19.140), 'lng': (72.820, 72.850)},
+    'K/E': {'lat': (19.070, 19.120), 'lng': (72.880, 72.930)},
+    'K/W': {'lat': (19.070, 19.110), 'lng': (72.820, 72.860)},
+    'L':   {'lat': (19.050, 19.100), 'lng': (72.860, 72.900)},
+    'M/E': {'lat': (19.040, 19.080), 'lng': (72.880, 72.920)},
+    'M/W': {'lat': (19.020, 19.060), 'lng': (72.870, 72.910)},
+    'N':   {'lat': (19.080, 19.160), 'lng': (72.890, 72.960)},
+    'P/N': {'lat': (19.150, 19.220), 'lng': (72.820, 72.870)},
+    'P/S': {'lat': (19.140, 19.190), 'lng': (72.830, 72.860)},
+    'R/C': {'lat': (19.200, 19.260), 'lng': (72.830, 72.870)},
+    'R/N': {'lat': (19.140, 19.200), 'lng': (72.920, 72.970)},
+    'R/S': {'lat': (19.100, 19.140), 'lng': (72.880, 72.920)},
+    'S':   {'lat': (19.110, 19.160), 'lng': (72.900, 72.950)},
+    'T':   {'lat': (19.160, 19.200), 'lng': (72.930, 72.980)},
 }
 
 SEED_DATA = {
     'pothole': {
         'weight': 30,
         'templates': [
-            "Deep pothole on {road} near {landmark}, causing traffic congestion and risk to commuters",
-            "Large pothole on {road}, approximately 2 feet deep. Multiple vehicles damaged last week",
-            "Series of potholes along {road} stretch near {landmark},急需 repair",
-            "Pothole at junction of {road} and {cross}, tyres burst risk for two-wheelers",
-            "Stretch of {road} between {landmark} and {landmark2} has multiple dangerous potholes",
-            "Deep crater on {road} after recent rains, no warning signs placed by BMC",
-            "Pothole repeatedly patched but opens again after every rain on {road}",
+            "Deep pothole on {road} near {landmark}, causing traffic congestion",
+            "Large pothole on {road} approximately 2 feet deep, vehicles damaged",
+            "Series of potholes along {road} stretch near {landmark}",
+            "Pothole at junction of {road} and main road, dangerous for two-wheelers",
             "Road surface completely deteriorated on {road}, potholes spanning entire width",
+            "Deep crater on {road} after recent rains, no warning signs placed",
+            "Pothole repeatedly patched but opens again after every rain on {road}",
         ]
     },
     'garbage': {
         'weight': 25,
         'templates': [
             "Garbage not collected for over a week at {landmark}, foul smell affecting residents",
-            "Overflowing garbage bin at corner of {road} and {cross}, stray dogs散 waste",
-            "Illegal dumping site behind {landmark}, BMC not taking action despite multiple complaints",
+            "Overflowing garbage bin at {road} near {landmark}, stray dogs散 waste",
+            "Illegal dumping site behind {landmark}, BMC not acting despite complaints",
             "Mixed waste dumped on footpath along {road}, pedestrian movement blocked",
             "Construction debris dumped on roadside near {landmark} for over a month",
             "Garbage pile attracting rodents and stray animals near {landmark}",
-            "No door-to-door waste collection in {road} area for the past two weeks",
-            "Burning of garbage near {landmark} causing respiratory issues for residents",
+            "No door-to-door waste collection in {road} area for two weeks",
         ]
     },
     'water': {
@@ -47,11 +65,9 @@ SEED_DATA = {
             "Water pipeline burst on {road},大量 water wastage for past 3 days",
             "No water supply in {road} area for 48 hours, residents severely affected",
             "Dirty/muddy water coming from taps in {landmark} area since last week",
-            "Water leakage from main pipeline at junction of {road} and {cross}",
+            "Water leakage from main pipeline at junction of {road} near {landmark}",
             "Low water pressure in {road} area, insufficient for overhead tank filling",
-            "Broken water meter at {landmark} needs replacement",
             "Water logging due to leaking pipe on {road} near {landmark}",
-            "Unauthorized water connection tapping from main line on {road}",
         ]
     },
     'drainage': {
@@ -59,23 +75,20 @@ SEED_DATA = {
         'templates': [
             "Drainage line blocked on {road}, sewage overflowing onto street near {landmark}",
             "Storm water drain clogged with debris at {landmark}, water logging during rains",
-            "Open manhole cover on {road} near {landmark}, risk to pedestrians and vehicles",
-            "Drainage water mixing with drinking water pipeline near {landmark}",
+            "Open manhole cover on {road} near {landmark}, risk to pedestrians",
             "Stagnant water in drain on {road} breeding mosquitoes since weeks",
-            "Drain covers stolen on {road} stretch, multiple open drains hazardous",
+            "Drain covers stolen on {road}, multiple open drains hazardous",
             "Sewage backflow into homes on {road} during peak hours",
-            "Illegal dumping in storm water drain at {landmark} causing blockages",
         ]
     },
     'streetlight': {
         'weight': 10,
         'templates': [
-            "Street lights not working on {road} for the past 10 days, dark stretch near {landmark}",
-            "Multiple street light poles damaged on {road} after vehicle collision near {landmark}",
-            "Flickering street lights on {road} causing voltage fluctuations in nearby homes",
-            "No street lighting on {road} between {landmark} and {landmark2}, safety concern",
+            "Street lights not working on {road} for 10 days, dark stretch near {landmark}",
+            "Multiple street light poles damaged on {road} after vehicle collision",
+            "Flickering street lights on {road} causing voltage fluctuations",
+            "No street lighting on {road} near {landmark}, safety concern at night",
             "Street light pole tilting dangerously on {road} near {landmark}",
-            "LED street lights installed but not switched on yet on {road}",
         ]
     },
     'road': {
@@ -84,51 +97,31 @@ SEED_DATA = {
             "Road surface damaged on {road} near {landmark}, needs re-laying",
             "Speed breaker missing on {road} after road work near {landmark}",
             "Footpath encroached by vendors on {road} near {landmark}, pedestrians forced onto road",
-            "Road widening work incomplete on {road} since 6 months near {landmark}",
         ]
     },
 }
 
-AREAS = {
-    'A': {
-        'roads': ['Shahid Bhagat Singh Road', 'Colaba Causeway', 'Sassoon Dock Road',
-                  'Nathalal Parekh Marg', 'Mahakavi Bhushan Marg', 'Cuffe Parade',
-                  'Madame Cama Road', 'Free Press Journal Marg', 'Dinshaw Vachha Road'],
-        'landmarks': ['Colaba Market', 'Gateway of India', 'Taj Mahal Palace Hotel',
-                      'CSMT Station', 'Regal Cinema', 'Badhwar Park',
-                      'Cooperage Football Ground', 'Mantralaya', 'Yacht Club'],
-        'crosses': ['Walton Road', 'Wodehouse Road', 'Henry Road', 'Gopalrao Deshmukh Marg']
-    },
-    'B': {
-        'roads': ['Mohandas Karamchand Gandhi Marg', 'Veer Nariman Road', 'D N Road',
-                  'Horniman Circle',                   'Ballard Estate', "P D'Mello Road",
-                  'Jamshedji Tata Road', 'Sprott Road', 'Cawasji Patel Street'],
-        'landmarks': ['Flora Fountain', 'Crawford Market', 'Mumbai University',
-                      'Bombay High Court', 'Kala Ghoda', 'Jehangir Art Gallery',
-                      'Chhatrapati Shivaji Maharaj Museum', 'St. Thomas Cathedral'],
-        'crosses': ['Rustom Sidhwa Marg', 'Mahatma Gandhi Road', 'Mint Road', 'Shoorji Vallabhdas Marg']
-    },
-    'C': {
-        'roads': ['Lamington Road', 'Grant Road', 'Maulana Shaukat Ali Road',
-                  'K R Jaju Marg', 'N M Joshi Marg', 'Dr. Babasaheb Ambedkar Road',
-                  'Pandit Paluskar Marg', 'Princess Street', 'Mogul Lane'],
-        'landmarks': ['Bombay Hospital', 'Grant Road Station', 'Mumbai Central Station',
-                      'Marine Drive', 'Babulnath Temple', 'Charni Road',
-                      'Opera House', 'Mumbai Police Headquarters'],
-        'crosses': ['S V P Road', 'Ravindra Natya Mandir Marg', 'Bhulabhai Desai Road', 'Walkeshwar Road']
-    },
-    'L': {
-        'roads': ['Lal Bahadur Shastri Marg', 'Sion-Trombay Road', 'Jupiter Colony',
-                  'Amrut Nagar', 'Sion Main Road', 'Kurla Andheri Road',
-                  'Ghatkopar-Mahul Road', 'Chandivali Farm Road', 'Safaee Road'],
-        'landmarks': ['Sion Station', 'Kurla Station', 'BARC Hospital',
-                      'Phoenix Market City', 'Nehru Nagar', 'Shivaji Park Kurla',
-                      'Kurla Bus Depot', 'Holy Family Hospital'],
-        'crosses': ['Mohan Gokhale Marg', 'Sahar Road', 'J M Mehta Marg', 'Powai Road']
-    }
-}
+MUMBAI_ROADS = [
+    'Main Road', 'Station Road', 'Market Road', 'Linking Road',
+    'S V Road', 'Western Express Highway', 'Eastern Express Highway',
+    'LBS Marg', 'Jogeshwari-Vikhroli Link Road', 'Andheri Kurla Road',
+    'Marve Road', 'Aarey Road', 'New Link Road', 'Milan Subway Road',
+    'Veera Desai Road', 'Mahakali Caves Road', 'Sahar Road',
+    'Ghatkopar-Mahul Road', 'Powai Road', 'Chandivali Farm Road',
+    'Kandivali Link Road', 'Borivali Link Road', 'Dahisar Link Road',
+    'Mulund Check Naka Road', 'Bhandup Village Road', 'Kanjurmarg Road',
+]
 
-CATEGORY_CHOICES = [c[0] for c in Complaint.CATEGORY_CHOICES]
+MUMBAI_LANDMARKS = [
+    'Railway Station', 'BMC Office', 'Bus Depot', 'Market',
+    'School', 'Hospital', 'Police Station', 'Post Office',
+    'Temple', 'Mosque', 'Church', 'Park', 'Shopping Complex',
+    'Petrol Pump', 'Flyover', 'Bridge', 'Waste Transfer Station',
+    'Fire Station', 'Community Hall', 'Municipal Garden',
+]
+
+COMPLAINTS_PER_WARD = 25
+
 STATUS_CHOICES = ['open', 'in_progress', 'resolved']
 STATUS_WEIGHTS = [60, 25, 15]
 
@@ -144,50 +137,46 @@ def random_date():
 def random_status():
     return random.choices(STATUS_CHOICES, weights=STATUS_WEIGHTS, k=1)[0]
 
-def generate_description(category, ward_name):
+def generate_description(category):
     data = SEED_DATA[category]
     template = random.choice(data['templates'])
-    area = AREAS[ward_name]
-    road = random.choice(area['roads'])
-    landmark = random.choice(area['landmarks'])
-    landmark2 = random.choice(area['landmarks'])
-    cross = random.choice(area['crosses'])
-
-    replacements = [
-        ('{road}', road), ('{landmark}', landmark),
-        ('{landmark2}', landmark2), ('{cross}', cross),
-    ]
-    desc = template
-    for pattern, value in replacements:
-        if pattern in desc:
-            desc = desc.replace(pattern, value, 1)
+    road = random.choice(MUMBAI_ROADS)
+    landmark = random.choice(MUMBAI_LANDMARKS)
+    desc = template.replace('{road}', road).replace('{landmark}', landmark)
     return desc
 
 class Command(BaseCommand):
-    help = 'Seed realistic complaints for wards A, B, C, L with proper lat/lng'
+    help = 'Seed realistic complaints for all wards with proper lat/lng'
 
     def add_arguments(self, parser):
-        parser.add_argument('--clear', action='store_true', help='Clear existing complaints first')
+        parser.add_argument('--clear', action='store_true', help='Clear all existing complaints first')
+        parser.add_argument('--wards', type=str, default=None,
+                          help='Comma-separated ward names (default: all)')
 
     def handle(self, *args, **options):
         if options['clear']:
-            deleted = Complaint.objects.filter(ward__ward_name__in=['A', 'B', 'C', 'L']).count()
-            Complaint.objects.filter(ward__ward_name__in=['A', 'B', 'C', 'L']).delete()
+            deleted = Complaint.objects.count()
+            Complaint.objects.all().delete()
             self.stdout.write(self.style.WARNING(f'Deleted {deleted} existing complaints'))
 
-        for ward_name in ['A', 'B', 'C', 'L']:
-            ward = Ward.objects.filter(ward_name=ward_name).first()
+        target_wards = options['wards'].split(',') if options['wards'] else list(WARD_BOUNDS.keys())
+
+        total_created = 0
+        for ward_name in target_wards:
+            ward = Ward.objects.filter(ward_name__iexact=ward_name.strip()).first()
             if not ward:
                 self.stdout.write(self.style.WARNING(f'Ward {ward_name} not found, skipping'))
                 continue
 
             existing = ward.complaints.count()
-            if existing >= 30:
-                self.stdout.write(f'Ward {ward_name} already has {existing} complaints, skipping')
+            need = COMPLAINTS_PER_WARD - existing
+            if need <= 0:
+                self.stdout.write(f'Ward {ward_name}: already has {existing} complaints, skipping')
                 continue
 
-            need = 40 - existing
-            if need <= 0:
+            bounds = WARD_BOUNDS.get(ward_name)
+            if not bounds:
+                self.stdout.write(self.style.WARNING(f'No bounds for ward {ward_name}, skipping'))
                 continue
 
             category_pool = []
@@ -197,25 +186,21 @@ class Command(BaseCommand):
             created = 0
             for _ in range(need):
                 category = random.choice(category_pool)
-                lat, lng = random_point(WARD_BOUNDS[ward_name])
-                description = generate_description(category, ward_name)
+                lat, lng = random_point(bounds)
+                description = generate_description(category)
                 status = random_status()
                 created_at = random_date()
                 resolved_at = created_at + timedelta(days=random.randint(3, 30)) if status == 'resolved' else None
 
                 Complaint.objects.create(
-                    ward=ward,
-                    category=category,
-                    description=description,
-                    latitude=lat,
-                    longitude=lng,
-                    status=status,
-                    created_at=created_at,
-                    resolved_at=resolved_at,
+                    ward=ward, category=category, description=description,
+                    latitude=lat, longitude=lng, status=status,
+                    created_at=created_at, resolved_at=resolved_at,
                     source='portal',
                 )
                 created += 1
 
-            self.stdout.write(self.style.SUCCESS(
-                f'Ward {ward_name}: created {created} complaints (total: {ward.complaints.count()})'
-            ))
+            total_created += created
+            self.stdout.write(f'Ward {ward_name}: created {created} complaints (total: {ward.complaints.count()})')
+
+        self.stdout.write(self.style.SUCCESS(f'Done — created {total_created} complaints total'))

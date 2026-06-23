@@ -54,6 +54,9 @@ for ward in Ward.objects.all():
     else:
         print(f'  Reset password for: {username} (Ward {ward.ward_name})')
 "
+# Seed realistic complaints with lat/lng for map visibility
+echo "Seeding complaints for map..."
+python manage.py seed_complaints
 echo "Seed data loaded."
 
 exec gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --timeout 120
