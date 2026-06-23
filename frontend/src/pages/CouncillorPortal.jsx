@@ -781,7 +781,7 @@ const CouncillorPortal = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <TrendingUp size={16} color="#22c55e" />
                   <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Complaint Trend (2019-2026)
+                    Complaint Trend (2019-2026) <span className="ml-badge">ML</span>
                   </h3>
                   {hasPredicted && (
                     <span style={{ fontSize: '0.7rem', color: '#64748b', marginLeft: 'auto' }}>
@@ -815,10 +815,10 @@ const CouncillorPortal = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <TrendingUp size={16} color="#ef4444" />
                   <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f87171', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Categories on the Rise
+                    Categories on the Rise <span className="ml-badge">ML</span>
                   </h3>
                   <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto' }}>
-                    3-year growth · ML anomaly detection
+                    3-year growth · Anomaly detection
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -853,10 +853,10 @@ const CouncillorPortal = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
                   <TrendingUp size={20} color="#818cf8" style={{ filter: 'drop-shadow(0 0 4px rgba(129,140,248,0.4))' }} />
                   <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f8fafc', margin: 0, letterSpacing: '0.02em' }}>
-                    AI Infrastructure Forecast & Insights
+                    AI Infrastructure Forecast & Insights <span className="ml-badge">ML</span>
                   </h3>
                   <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto', fontFamily: 'monospace' }}>
-                    Model: {d.predictions.model_version}
+                    v{d.predictions.model_version}
                   </span>
                 </div>
                 
@@ -971,7 +971,7 @@ const CouncillorPortal = () => {
                   <Sparkles size={24} color="#818cf8" />
                   <div>
                     <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#f8fafc', margin: 0 }}>
-                      AI Ward Briefing
+                      AI Ward Briefing <span className="ml-badge">ML</span>
                     </h3>
                     <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
                       {new Date(d.briefing.generated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}

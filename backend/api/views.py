@@ -630,6 +630,14 @@ def update_complaint_status(request, pk):
         complaint.resolved_at = None
     complaint.save()
 
+    # Fire-and-forget WhatsApp notification if Twilio is configured
+    if complaint.sender_phone:
+        try:
+            from .twilio_views import send_status_update
+            send_status_update(complaint.id, new_status, complaint.sender_phone)
+        except Exception:
+            pass  # Twilio failure must not break the status update
+
     return Response({'success': True, 'status': complaint.status, 'resolved_at': complaint.resolved_at})
 
 @api_view(['GET'])
@@ -828,10 +836,13 @@ def public_health_summary(request):
 @permission_classes([AllowAny])
 def public_config(request):
     from django.conf import settings
-    number = settings.TWILIO_WHATSAPP_NUMBER.replace('whatsapp:', '').strip()
+    raw = settings.TWILIO_WHATSAPP_NUMBER or ''
+    number = raw.replace('whatsapp:', '').strip()
+    twilio_configured = bool(settings.TWILIO_ACCOUNT_SID and number and 'your_account' not in settings.TWILIO_ACCOUNT_SID)
     return Response({
-        'whatsapp_number': number,
-        'whatsapp_link': f'https://wa.me/{number.replace("+", "")}?text=Hello',
+        'whatsapp_number': number or None,
+        'whatsapp_link': f'https://wa.me/{number.replace("+", "")}?text=Hello' if number else None,
+        'twilio_configured': twilio_configured,
     })
 
 

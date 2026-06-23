@@ -1,12 +1,13 @@
 ﻿import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
-import { Map, BarChart2, Activity, ShieldCheck, Megaphone, Hexagon, ArrowDown, LogIn, UserPlus, User as UserIcon, LogOut, MessageSquare, Smartphone, Camera, MapPin, CheckCircle, ExternalLink, Search, Crosshair } from 'lucide-react';
+import { Map, BarChart2, Activity, ShieldCheck, Megaphone, Hexagon, ArrowDown, LogIn, UserPlus, User as UserIcon, LogOut, MessageSquare, Smartphone, Camera, MapPin, CheckCircle, ExternalLink, Search, Crosshair, TrendingUp } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import MumbaiMap from './components/MumbaiMap';
 import WardDetailPanel from './components/WardDetailPanel';
 import ComplaintModal from './components/ComplaintModal';
 import CouncillorTable from './components/CouncillorTable';
+import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import TrackComplaint from './pages/TrackComplaint';
 import AdminPortal from './pages/AdminPortal';
@@ -68,34 +69,10 @@ function LandingPage() {
   return (
     <div className="landing-page">
       {/* --- Navbar --- */}
-      <nav className="navbar" id="navbar">
-        <div className="nav-brand">
-          <Hexagon className="nav-icon" size={24} />
-          <span className="nav-title">UrbanIQ</span>
-        </div>
-        <div className="nav-links">
-          <a href="#problem">The Problem</a>
-          <a href="#how-it-works">How It Works</a>
-          <a href="#map-section">Live Map</a>
-          <a href="#features">Features</a>
-          <a href="#accountability">Accountability</a>
-          <Link to="/track">Track Issue</Link>
-          <Link to="/complaints-map">Complaint Map</Link>
-          <Link to="/dashboard" id="nav-dashboard-link" className="nav-link-dashboard">
-            Dashboard
-          </Link>
-        </div>
-        <div className="nav-right">
-          <NavAuthActions />
-          <button
-            id="report-issue-btn"
-            className="btn-report"
-            onClick={() => setShowComplaintModal(true)}
-          >
-            <Megaphone size={15} /> Report
-          </button>
-        </div>
-      </nav>
+      <Navbar
+        showReportBtn
+        onReportClick={() => setShowComplaintModal(true)}
+      />
 
       {/* ──────────────── HERO ──────────────── */}
       <section className="hero-section" id="hero">
@@ -268,9 +245,9 @@ function LandingPage() {
           </div>
           <div className="feature-card">
             <div className="feature-icon"><Activity size={32} color="#818cf8" /></div>
-            <h3>Real-time Trends</h3>
+            <h3>Real-time Trends <span className="ml-badge">ML</span></h3>
             <p>
-              Monitor complaint volumes as they change. Early-warning indicators flag emerging hotspots
+              Monitor complaint volumes as they change. ML-powered early-warning indicators flag emerging hotspots
               before they become full-blown crises — giving administrators time to act.
             </p>
           </div>
@@ -284,7 +261,7 @@ function LandingPage() {
           </div>
           <div className="feature-card">
             <div className="feature-icon"><Crosshair size={32} color="#818cf8" /></div>
-            <h3>Automated Ward Matching</h3>
+            <h3>Automated Ward Matching <span className="ml-badge">ML</span></h3>
             <p>
               AI-powered routing maps every complaint to the correct ward — even with partial or
               inconsistent input. No more complaints falling through administrative cracks.
@@ -296,6 +273,14 @@ function LandingPage() {
             <p>
               Every complaint gets a unique reference number. Citizens can track resolution status
               24×7 via the web portal or WhatsApp — no login required.
+            </p>
+          </div>
+          <div className="feature-card">
+            <div className="feature-icon"><TrendingUp size={32} color="#818cf8" /></div>
+            <h3>AI Predictions &amp; Forecasts <span className="ml-badge">ML</span></h3>
+            <p>
+              ML models forecast complaint volumes, risk levels, and health scores for every ward 1–2
+              years ahead. Councillors get early warnings and actionable recommendations before problems escalate.
             </p>
           </div>
         </div>
@@ -357,7 +342,7 @@ function LandingPage() {
                 <span>Send your location — done!</span>
               </div>
             </div>
-            {whatsappConfig?.whatsapp_link && (
+            {whatsappConfig?.whatsapp_link ? (
               <a
                 href={whatsappConfig.whatsapp_link}
                 target="_blank"
@@ -366,6 +351,22 @@ function LandingPage() {
               >
                 <ExternalLink size={18} /> Open WhatsApp
               </a>
+            ) : (
+              <p style={{ color: '#64748b', fontSize: '0.82rem', marginTop: '1rem' }}>
+                WhatsApp bot not yet configured. Contact your administrator to set up Twilio credentials.
+              </p>
+            )}
+            {whatsappConfig && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.75rem' }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: whatsappConfig.twilio_configured ? '#22c55e' : '#ef4444',
+                  flexShrink: 0,
+                }} />
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  WhatsApp Bot {whatsappConfig.twilio_configured ? 'Active' : 'Disconnected'}
+                </span>
+              </div>
             )}
           </div>
         </div>
