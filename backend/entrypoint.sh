@@ -21,7 +21,7 @@ fi
 
 echo "Loading seed data..."
 python manage.py load_wards
-python manage.py load_metrics
+python manage.py load_metrics --csv data/ward_metrics_multiyear_2025.csv
 python manage.py update_health_scores
 
 # Create/reset default councillor accounts (one per ward)
