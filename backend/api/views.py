@@ -286,6 +286,16 @@ def councillors(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def councillor_ward_dashboard(request):
+    try:
+        return _councillor_ward_dashboard(request)
+    except Exception as e:
+        import traceback
+        return Response({
+            'error': f'Dashboard error: {str(e)}',
+            'detail': traceback.format_exc(),
+        }, status=500)
+
+def _councillor_ward_dashboard(request):
     profile = request.user.profile
     if profile.role != 'councillor':
         return Response({'error': 'Only councillors can access this endpoint.'}, status=403)
