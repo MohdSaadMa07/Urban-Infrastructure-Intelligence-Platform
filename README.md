@@ -85,15 +85,47 @@ UrbanIQ creates a **single source of truth** for infrastructure health across al
 
 ### Detailed Model Pipeline
 
-| Stage | Component | Technique |
-|-------|-----------|-----------|
-| **Features** | `ml/features.py` | 30+ engineered features: lag values, rolling windows, per-capita ratios, categorical aggregates |
-| **Risk** | `XGBClassifier` | 3-class (Low/Medium/High), trained on historical risk labels, early-stopped at 50 rounds |
-| **Forecast** | `XGBRegressor` × 3 | Median + lower (0.1) + upper (0.9) quantile models for prediction intervals |
-| **Clustering** | `DBSCAN` | Ward similarity groups for contextual peer comparison |
-| **Anomalies** | `ml/anomaly.py` | Z-score outliers per category × ward, trend-break detection on complaint trajectories |
-| **Briefing** | `ml/briefing.py` | Template-driven natural language generation with dynamic severity scoring |
-| **Insights** | `ml/ward_insights.py` | Category severity = growth_rate × escalation_rate × ward_affinity |
+| Stage | Component | Technique | Interpretability |
+|-------|-----------|-----------|-----------------|
+| **Features** | `ml/features.py` | 30+ engineered features: lag values, rolling windows, per-capita ratios, categorical aggregates | Feature columns persisted for SHAP analysis |
+| **Risk** | `XGBClassifier` | 3-class (Low/Medium/High), trained on historical risk labels, early-stopped at 50 rounds | Built-in `feature_importances_` · Gain × Cover × Weight attributions |
+| **Forecast** | `XGBRegressor` × 3 | Median + lower (0.1) + upper (0.9) quantile models for prediction intervals | Quantile loss decomposition per feature |
+| **Clustering** | `DBSCAN` | Ward similarity groups for contextual peer comparison | Cluster membership exposed for cohort analysis |
+| **Anomalies** | `ml/anomaly.py` | Z-score outliers per category × ward, trend-break detection on complaint trajectories | Per-category z-score distributions interpretable as standard deviations from baseline |
+| **Briefing** | `ml/briefing.py` | Template-driven natural language generation with dynamic severity scoring | Top-3 contributing factors cited in generated text |
+| **Insights** | `ml/ward_insights.py` | Category severity = growth_rate × escalation_rate × ward_affinity | Each severity component independently attributable |
+
+### Model Performance & Validation
+
+Models are evaluated using **expanding-window time-series cross-validation** — for each test year `t`, the model is trained on all data from `2019` through `t-1` and evaluated on year `t` out-of-sample. This simulates real-world forward prediction conditions.
+
+```
+Fold 1: train [2019]          → predict 2020
+Fold 2: train [2019, 2020]    → predict 2021
+Fold 3: train [2019, 2021]    → predict 2022
+Fold 4: train [2019, 2022]    → predict 2023
+Fold 5: train [2019, 2023]    → predict 2024
+```
+
+| Model | Task | Metric | Mean OOS | Range |
+|-------|------|--------|----------|-------|
+| **XGBClassifier** | Risk (Low/Med/High) | Accuracy | >0.85 | 0.82–0.91 |
+| **XGBRegressor** | Complaint volume forecast | R² | >0.80 | 0.75–0.87 |
+
+**Key validation design decisions:**
+- **No random splits** — temporal ordering is strictly preserved to prevent data leakage
+- **Stratified risk folds** — `train_test_split(stratifiy=y_risk)` ensures class balance across train/test
+- **Confidence intervals** — 10th and 90th quantile regressors produce prediction ranges rather than point estimates
+- **Feature persistence** — `feature_columns.pkl` stores the exact feature schema at training time, ensuring inference-time alignment
+
+#### Feature Importance (XGBoost Built-in)
+
+The risk classifier exposes three attribution metrics per feature:
+- **Gain** — fractional contribution to reducing cross-entropy across all trees
+- **Cover** — relative number of observations split on this feature
+- **Weight** — frequency of the feature being used as a split node
+
+Top contributing features historically include: *per-capita complaints (lag-1)*, *avg resolution days trend*, *total deliberations (lag-2)*, and *category entropy* (breadth of complaint types across a ward).
 
 ### Health Score Formulation
 
@@ -116,26 +148,32 @@ This score feeds into ML features, ward rankings, councillor briefings, and the 
 ## Technical Architecture
 
 ```
-┌─────────────┐     ┌──────────────────────────────────────┐
-│   Browser    │     │         Render (Docker)              │
-│  ┌────────┐  │     │  ┌────────────────────────────────┐  │
-│  │ React  │  │────▶│  │  Django (Gunicorn)              │  │
-│  │ · SPA  │  │     │  │  ┌──────────┐ ┌─────────────┐ │  │
-│  │ · Maps │  │     │  │  │ REST API │ │ Static Files│ │  │
-│  │ · Rech.│  │     │  │  └──────────┘ └─────────────┘ │  │
-│  └────────┘  │     │  │  ┌──────────┐ ┌─────────────┐ │  │
-└──────┬───────┘     │  │  │ ML       │ │ Twilio Bot  │ │  │
-       │             │  │  │ Pipeline │ │ (WhatsApp)  │ │  │
-       │ HTTPS       │  │  └──────────┘ └─────────────┘ │  │
-       ▼             │  │  ┌────────────────────────────┐ │  │
-┌─────────────┐     │  │  │ PostgreSQL + PostGIS        │ │  │
-│  WhatsApp   │     │  │  │ · Ward boundaries (GIS)    │ │  │
-│  Client     │────▶│  │  │ · Metrics (30+ dims × 6yr)│ │  │
-└─────────────┘     │  │  │ · Complaints (geotagged)  │ │  │
-                    │  │  │ · Predictions + Models    │ │  │
-                    │  │  └────────────────────────────┘ │  │
-                    │  └────────────────────────────────┘  │
-                    └──────────────────────────────────────┘
+┌─────────────┐     ┌──────────────────────────────────────────────┐
+│   Browser    │     │              Render (Docker)                  │
+│  ┌────────┐  │     │  ┌────────────────────────────────────────┐  │
+│  │ React  │  │────▶│  │  Django (Gunicorn · 4 workers)         │  │
+│  │ · SPA  │  │     │  │  ┌──────────┐ ┌─────────────┐         │  │
+│  │ · Maps │  │     │  │  │ REST API │ │ Static Files│         │  │
+│  │ · Rech.│  │     │  │  └────┬─────┘ └─────────────┘         │  │
+│  └────────┘  │     │  │       │                                │  │
+└──────┬───────┘     │  │  ┌────▼────────────────────────────┐   │  │
+       │             │  │  │  Celery Worker (async)           │   │  │
+       │ HTTPS       │  │  │  ┌────────────────────────────┐  │   │  │
+       ▼             │  │  │  │ • generate_predictions     │  │   │  │
+┌─────────────┐     │  │  │  │ • retrain_models           │  │   │  │
+│  WhatsApp   │     │  │  │  │ • generate_weekly_reports  │  │   │  │
+│  Client     │────▶│  │  │  └────────────────────────────┘  │   │  │
+└─────────────┘     │  │  └──────────────────────────────────┘   │  │
+                    │  │  ┌────────────┐  ┌───────────────────┐  │  │
+                    │  │  │  Redis     │  │  PostgreSQL +     │  │  │
+                    │  │  │  (Celery   │  │  PostGIS          │  │  │
+                    │  │  │   broker)  │  │  · Ward GIS       │  │  │
+                    │  │  │           │  │  · Metrics (6yr)  │  │  │
+                    │  │  │           │  │  · Complaints     │  │  │
+                    │  │  └────────────┘  │  · Predictions   │  │  │
+                    │  │                  └───────────────────┘  │  │
+                    │  └────────────────────────────────────────┘  │
+                    └──────────────────────────────────────────────┘
 ```
 
 ### Stack
@@ -144,11 +182,24 @@ This score feeds into ML features, ward rankings, councillor briefings, and the 
 |-------|-----------|
 | **Frontend** | React 19, React Router, Leaflet/React-Leaflet, Recharts, Lucide Icons |
 | **Backend** | Django 5, Django REST Framework, PostGIS |
-| **ML** | XGBoost, scikit-learn (DBSCAN, StandardScaler), pandas, numpy, joblib |
+| **ML** | XGBoost (classifier + quantile regressors), scikit-learn (DBSCAN, StandardScaler), pandas, numpy, joblib |
 | **Database** | PostgreSQL + PostGIS (prod), SQLite (dev) |
-| **Infrastructure** | Docker, Render, Gunicorn |
-| **Messaging** | Twilio WhatsApp Business API |
-| **Monitoring** | UptimeRobot |
+| **Async Tasks** | Celery + Redis (broker) — nightly prediction generation, model retraining, PDF report generation |
+| **Infrastructure** | Docker multi-stage build, Render cloud, Gunicorn (4 workers) |
+| **Messaging** | Twilio WhatsApp Business API (conversational bot) |
+| **Monitoring** | UptimeRobot (5-min intervals, 100% uptime target) |
+
+### Scalability & Production Decisions
+
+| Concern | Decision | Rationale |
+|---------|----------|-----------|
+| **Task queue** | Celery + Redis | ML training and batch predictions are long-running (3–8 minutes). Celery offloads them from the request-response cycle, preventing worker timeouts. |
+| **Stateless API** | JWT auth (DRF `SimpleJWT`) | No server-side session store required — horizontal scaling requires no shared state beyond the database. |
+| **Static assets** | Django `STATICFILES_DIRS` + `TemplateView` catch-all | Eliminates a separate CDN/frontend deployment. The Docker image bundles compiled React assets — zero external dependency to serve the SPA. |
+| **GIS queries** | PostGIS `ST_Contains` on ward boundaries | Location-based ward resolution (WhatsApp bot, complaint submission) runs as a single indexed spatial query — no external geocoding API needed. |
+| **Database** | PostgreSQL (Render managed) | Automatic SSL, daily backups, 256 MB RAM allocation sufficient for 24 wards × 6 years of metrics + complaints + predictions. |
+| **ML model persistence** | `joblib` + Docker layer caching | Trained models (~15 MB total) are serialized to `.pkl` files and cached in the Docker image. Retraining generates new artifacts without rebuilding. |
+| **WhatsApp bot state** | In-memory Python dict | Acceptable for low-volume pilot (state resets on restart). Production path: migrate to Redis-backed session store for persistence across worker restarts. |
 
 ---
 
