@@ -83,6 +83,15 @@ def _health_label(score: float | None) -> str:
 
 def generate_ward_report(ward_name: str) -> Path | None:
     """Generate a PDF report for the given ward, return file path."""
+    try:
+        return _generate_ward_report(ward_name)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("Report generation failed for %s: %s", ward_name, exc)
+        return None
+
+def _generate_ward_report(ward_name: str) -> Path | None:
+    """Generate a PDF report for the given ward, return file path."""
     ward = Ward.objects.filter(ward_name__iexact=ward_name).first()
     if not ward:
         return None

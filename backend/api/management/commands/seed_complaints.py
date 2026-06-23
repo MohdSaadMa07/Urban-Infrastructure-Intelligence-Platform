@@ -131,8 +131,9 @@ def random_point(bounds):
     return round(lat, 6), round(lng, 6)
 
 def random_date():
+    from django.utils import timezone
     days_ago = random.randint(0, 180)
-    return datetime.now() - timedelta(days=days_ago)
+    return timezone.now() - timedelta(days=days_ago)
 
 def random_status():
     return random.choices(STATUS_CHOICES, weights=STATUS_WEIGHTS, k=1)[0]
