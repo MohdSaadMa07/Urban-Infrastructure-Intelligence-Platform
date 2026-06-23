@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Hexagon, LogIn, LogOut, UserPlus, UserIcon, Megaphone, ChevronDown, Menu, X } from 'lucide-react';
+import { Hexagon, LogIn, LogOut, UserPlus, UserIcon, Megaphone, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 function NavAuthActions({ onAction }) {
@@ -36,38 +36,10 @@ function NavAuthActions({ onAction }) {
   );
 }
 
-function MoreDropdown({ open, onToggle, onClose }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open, onClose]);
-
-  return (
-    <div className="nav-more" ref={ref}>
-      <button className="nav-more-btn" onClick={onToggle}>
-        More <ChevronDown size={14} style={{ marginLeft: 2 }} />
-      </button>
-      {open && (
-        <div className="nav-more-dropdown">
-          <Link to="/complaints-map" onClick={onClose}><span className="nav-more-icon">🗺️</span> Complaint Map</Link>
-          <Link to="/dashboard" onClick={onClose}><span className="nav-more-icon">📊</span> Dashboard</Link>
-          <Link to="/track" onClick={onClose}><span className="nav-more-icon">🔍</span> Track Issue</Link>
-          <Link to="/public" onClick={onClose}><span className="nav-more-icon">📈</span> Public Dashboard</Link>
-          <a href="#accountability" onClick={onClose}><span className="nav-more-icon">📋</span> Accountability</a>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function Navbar({ showReportBtn, onReportClick, onNavAction }) {
+export default function Navbar({ showReportBtn, onReportClick }) {
   const { isAuthenticated, user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const closeMobile = () => setMobileOpen(false);
 
   const roleDashboard = user?.profile?.role === 'councillor' ? '/councillor-portal'
     : user?.profile?.role === 'admin' ? '/admin-portal' : '/dashboard';
@@ -81,25 +53,14 @@ export default function Navbar({ showReportBtn, onReportClick, onNavAction }) {
       </Link>
 
       <div className={`nav-links ${mobileOpen ? 'nav-links-open' : ''}`}>
-        <a href="#problem" onClick={() => setMobileOpen(false)}>The Problem</a>
-        <a href="#how-it-works" onClick={() => setMobileOpen(false)}>How It Works</a>
-        <a href="#features" onClick={() => setMobileOpen(false)}>Features</a>
-        <a href="#map-section" onClick={() => setMobileOpen(false)}>Live Map</a>
-
-        <MoreDropdown
-          open={moreOpen}
-          onToggle={() => setMoreOpen(v => !v)}
-          onClose={() => setMoreOpen(false)}
-        />
-
-        {isAuthenticated && (
-          <Link to={roleDashboard} className={`nav-link-emphasis ${mobileOpen ? '' : 'nav-link-desktop-hide'}`} onClick={() => setMobileOpen(false)}>
-            Dashboard
-          </Link>
-        )}
+        <a href="/#map-section" onClick={closeMobile}>Live Map</a>
+        <Link to="/complaints-map" onClick={closeMobile}>Complaint Map</Link>
+        <Link to="/dashboard" onClick={closeMobile}>Dashboard</Link>
+        <Link to="/public" onClick={closeMobile}>City Summary</Link>
+        <a href="/#features" onClick={closeMobile}>Features</a>
 
         <div className="nav-mobile-auth">
-          <NavAuthActions onAction={() => setMobileOpen(false)} />
+          <NavAuthActions onAction={closeMobile} />
         </div>
       </div>
 
