@@ -1,10 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, RadarChart, Radar,
   PolarGrid, PolarAngleAxis, Legend, LineChart, Line,
 } from 'recharts';
-import { Hexagon, BarChart2, Trophy, Clock, Landmark, AlertTriangle, Medal, TrendingUp } from 'lucide-react';
+import { Hexagon, BarChart2, Trophy, Clock, Landmark, AlertTriangle, Medal, TrendingUp, MapPin } from 'lucide-react';
 
 /* -- colour helpers -- */
 const scoreColor = (score) => {
@@ -146,6 +147,9 @@ const Dashboard = () => {
             </button>
           ))}
         </nav>
+        <Link to="/complaints-map" className="dash-nav-item" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', color: '#94a3b8', fontSize: '0.85rem', borderRadius: 8 }}>
+          <MapPin size={18} /> Complaint Map
+        </Link>
         <a href="/" className="dash-back-link" id="back-to-home">
           &lt; Back to Home
         </a>

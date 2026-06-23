@@ -401,6 +401,7 @@ function LandingPage() {
             <a href="#how-it-works">How It Works</a>
             <a href="#map-section">Live Map</a>
             <a href="#features">Features</a>
+            <Link to="/complaints-map">Complaint Map</Link>
             <Link to="/dashboard">Dashboard</Link>
           </div>
           <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
@@ -409,6 +410,9 @@ function LandingPage() {
             </Link>
             <Link to="/public" style={{ color: '#818cf8', textDecoration: 'none', fontSize: '0.875rem' }}>
               Public Dashboard
+            </Link>
+            <Link to="/complaints-map" style={{ color: '#818cf8', textDecoration: 'none', fontSize: '0.875rem' }}>
+              Complaint Map
             </Link>
           </div>
         </div>

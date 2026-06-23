@@ -65,6 +65,7 @@ const PublicDashboard = () => {
         <div className="nav-links">
           <Link to="/" style={{ color: '#94a3b8' }}>Home</Link>
           <span style={{ color: '#818cf8', fontWeight: 700 }}>Public Dashboard</span>
+          <Link to="/complaints-map" style={{ color: '#94a3b8' }}>Complaint Map</Link>
         </div>
       </nav>
 
@@ -102,6 +103,29 @@ const PublicDashboard = () => {
                 </div>
               </div>
             )}
+
+            {/* Complaint Map CTA */}
+            <Link to="/complaints-map" style={{ textDecoration: 'none', display: 'block', marginBottom: '1.5rem' }}>
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(129,140,248,0.12), rgba(6,182,212,0.08))',
+                border: '1px solid rgba(129,140,248,0.2)', borderRadius: 16, padding: '1.25rem 1.5rem',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: '#f1f5f9' }}>
+                    <MapPin size={18} color="#818cf8" style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                    Explore Complaint Map
+                  </h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0.3rem 0 0' }}>
+                    See all civic complaints across Mumbai wards on an interactive map with filters
+                  </p>
+                </div>
+                <span style={{
+                  padding: '0.4rem 1rem', borderRadius: 8, background: '#818cf8', color: '#fff',
+                  fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap',
+                }}>View Map →</span>
+              </div>
+            </Link>
 
             {/* Ward Health Grid */}
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
