@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import CouncillorPortal from './pages/CouncillorPortal';
 import PublicDashboard from './pages/PublicDashboard';
+import ComplaintsMap from './pages/ComplaintsMap';
 import './App.css';
 
 /* --- Navbar Auth Actions --- */
@@ -79,6 +80,7 @@ function LandingPage() {
           <a href="#features">Features</a>
           <a href="#accountability">Accountability</a>
           <Link to="/track">Track Issue</Link>
+          <Link to="/complaints-map">Complaint Map</Link>
           <Link to="/dashboard" id="nav-dashboard-link" className="nav-link-dashboard">
             Dashboard
           </Link>
@@ -437,6 +439,7 @@ function App() {
           <Route path="/admin-portal" element={<AdminPortal />} />
           <Route path="/councillor-portal" element={<CouncillorPortal />} />
           <Route path="/public" element={<PublicDashboard />} />
+          <Route path="/complaints-map" element={<ComplaintsMap />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
