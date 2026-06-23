@@ -409,8 +409,8 @@ def councillor_ward_dashboard(request):
         })
     failing_categories.sort(key=lambda x: x['recent_3yr_growth_pct'], reverse=True)
 
-    # ── Ward Metrics History (2019-2024 only) for trend charts ──────────
-    ward_metrics_qs = ward.metrics.filter(year__lte=2024).order_by('year')
+    # ── Ward Metrics History (2019-2025) for trend charts ──────────
+    ward_metrics_qs = ward.metrics.filter(year__lte=2025).order_by('year')
     ward_metrics_history = []
     for m in ward_metrics_qs:
         hs = compute_health_score(m)

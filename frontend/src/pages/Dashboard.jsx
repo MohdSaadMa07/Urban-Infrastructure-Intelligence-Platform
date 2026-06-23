@@ -369,8 +369,8 @@ const Dashboard = () => {
         {activeTab === 'trends' && (
           <div className="dash-content">
             <div className="dash-card dash-card-full">
-              <h3 className="dash-card-title">5-Year Complaint Volume Trend</h3>
-              <p className="dash-card-sub">Total civic complaints registered across Mumbai wards from 2019 to 2023.</p>
+              <h3 className="dash-card-title">Complaint Volume Trend</h3>
+              <p className="dash-card-sub">Total civic complaints registered across Mumbai wards from 2019 to 2025.</p>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={trendData} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.1)" />
@@ -383,8 +383,8 @@ const Dashboard = () => {
             </div>
             
             <div className="dash-card dash-card-full">
-              <h3 className="dash-card-title">5-Year Average Resolution Speed</h3>
-              <p className="dash-card-sub">Average days taken to resolve a complaint citywide.</p>
+              <h3 className="dash-card-title">Average Resolution Speed</h3>
+              <p className="dash-card-sub">Average days taken to resolve a complaint citywide (2019-2025).</p>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={trendData} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(99,102,241,0.1)" />
