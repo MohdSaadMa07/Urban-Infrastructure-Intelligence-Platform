@@ -69,7 +69,7 @@ const PublicDashboard = () => {
         </div>
       </nav>
 
-      <main style={{ maxWidth: 1000, margin: '0 auto', padding: '2rem 1rem' }}>
+      <main style={{ maxWidth: 1000, margin: '0 auto', padding: 'calc(2rem + 60px) 1rem 2rem' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>Loading...</div>
         ) : (

@@ -133,7 +133,7 @@ export default function ComplaintsMap() {
         </div>
       </nav>
 
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: 'calc(2rem + 60px) 1.5rem 2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>Mumbai Complaint Map</h1>
