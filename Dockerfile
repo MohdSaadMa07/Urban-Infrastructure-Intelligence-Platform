@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm AS backend
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gdal-bin \
@@ -16,8 +16,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 
-RUN python manage.py collectstatic --noinput
+# --- Build frontend ---
+FROM node:20-bookworm AS frontend
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ .
+RUN npm run build
 
+# --- Final image ---
+FROM backend AS final
+RUN mkdir -p /frontend
+COPY --from=frontend /app/dist /frontend/dist
+RUN python manage.py collectstatic --noinput
 RUN chmod +x entrypoint.sh
 
 EXPOSE 8000
