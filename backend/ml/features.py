@@ -2,22 +2,22 @@
 Feature engineering for ward-level civic metrics.
 
 Builds a feature matrix from CivicMetrics (DB) with lag/trend features.
+Health score logic here mirrors api/services/health_score.py for dict-based computation.
 """
+
+import math
 
 import numpy as np
 import pandas as pd
 
+from api.services.health_score import _sigmoid as sigmoid
+
 
 def _compute_health_score_from_row(row):
-    """Replicate the health score logic for a feature row dict."""
+    """Compute health score from a feature row dict (mirrors api/services/health_score.py)."""
     complaints = row.get("per_capita_complaints", 0) or 0
     avg_days = row.get("avg_resolution_days", 0) or 0
     deliberations = row.get("per_capita_deliberations", 0) or 0
-
-    import math
-
-    def sigmoid(x, midpoint, steepness):
-        return 1.0 / (1.0 + math.exp(steepness * (x - midpoint)))
 
     complaint_score = sigmoid(complaints, midpoint=6500, steepness=0.0008)
     resolution_score = sigmoid(avg_days, midpoint=40, steepness=0.12)

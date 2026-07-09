@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, GeoJSON, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Hexagon, Filter, MapPin, X } from 'lucide-react';
+import API_BASE from '../config';
 
 const CATEGORY_COLORS = {
   'Garbage': '#f59e0b',
@@ -45,9 +46,9 @@ export default function ComplaintsMap() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetch('/api/complaints/').then(r => r.json()),
-      fetch('/api/wards-geojson/').then(r => r.json()),
-      fetch('/api/health-scores/').then(r => r.json()),
+      fetch(`${API_BASE}/complaints/`).then(r => r.json()),
+      fetch(`${API_BASE}/wards-geojson/`).then(r => r.json()),
+      fetch(`${API_BASE}/health-scores/`).then(r => r.json()),
     ])
       .then(([complaintsData, geo, scores]) => {
         const map = {};

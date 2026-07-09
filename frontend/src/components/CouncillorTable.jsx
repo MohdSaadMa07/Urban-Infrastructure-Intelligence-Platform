@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Medal } from 'lucide-react';
+import API_BASE from '../config';
 
 const SORT_KEYS = {
   engagement: 'engagement_score',
@@ -15,7 +16,7 @@ const CouncillorTable = () => {
   const [sortDir, setSortDir] = useState('desc');
 
   useEffect(() => {
-    fetch('/api/councillors/')
+    fetch(`${API_BASE}/councillors/`)
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));

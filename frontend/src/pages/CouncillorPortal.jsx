@@ -12,6 +12,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../context/AuthContext';
+import API_BASE from '../config';
 
 // DivIcon-based markers (no image path issues with bundlers)
 import L from 'leaflet';
@@ -75,7 +76,7 @@ const CouncillorPortal = () => {
 
   const fetchDashboard = async (status) => {
     setLoading(true);
-    let url = '/api/councillor/dashboard/';
+    let url = `${API_BASE}/councillor/dashboard/`;
     if (status && status !== 'all') url += `?status=${status}`;
     try {
       const res = await fetch(url, {
@@ -89,7 +90,7 @@ const CouncillorPortal = () => {
       setDashboard(data);
       // Fetch hotspots
       try {
-        const hres = await fetch(`/api/hotspots/?ward=${data.ward.ward_name}`, {
+        const hres = await fetch(`${API_BASE}/hotspots/?ward=${data.ward.ward_name}`, {
           headers: { Authorization: `Bearer ${getAccessToken()}` },
         });
         if (hres.ok) setHotspots(await hres.json());
@@ -122,7 +123,7 @@ const CouncillorPortal = () => {
 
   const handleStatusChange = async (complaintId, newStatus) => {
     try {
-      const res = await fetch(`/api/complaints/${complaintId}/status/`, {
+      const res = await fetch(`${API_BASE}/complaints/${complaintId}/status/`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -287,7 +288,7 @@ const CouncillorPortal = () => {
                       try {
                         const wardName = d.ward?.ward_name;
                         if (!wardName) return;
-                        const res = await fetch(`/api/reports/download/?ward=${encodeURIComponent(wardName)}`, {
+                        const res = await fetch(`${API_BASE}/reports/download/?ward=${encodeURIComponent(wardName)}`, {
                           headers: { Authorization: `Bearer ${getAccessToken()}` },
                         });
                         if (!res.ok) { alert('Report generation failed'); return; }

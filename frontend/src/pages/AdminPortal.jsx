@@ -2,6 +2,7 @@
 import { Hexagon, Filter, LogOut, AlertCircle, Lock } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import API_BASE from '../config';
 
 const WARDS = [
   'A', 'B', 'C', 'D', 'E', 'F/N', 'F/S', 'G/N', 'G/S',
@@ -21,7 +22,7 @@ const AdminPortal = () => {
 
   const fetchComplaints = async () => {
     setFetchLoading(true);
-    let url = '/api/complaints/';
+    let url = `${API_BASE}/complaints/`;
     if (wardFilter) url += `?ward=${wardFilter}`;
 
     try {
@@ -53,7 +54,7 @@ const AdminPortal = () => {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
-      const res = await fetch(`/api/complaints/${id}/status/`, {
+      const res = await fetch(`${API_BASE}/complaints/${id}/status/`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

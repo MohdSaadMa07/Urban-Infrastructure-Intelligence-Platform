@@ -1,12 +1,11 @@
 ﻿import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import API_BASE from '../config';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const API_BASE = '/api';
 
   const storeTokens = (access, refresh) => {
     localStorage.setItem('access_token', access);

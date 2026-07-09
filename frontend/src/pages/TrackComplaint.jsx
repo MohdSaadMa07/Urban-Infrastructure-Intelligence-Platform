@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Hexagon, CheckCircle, Clock, AlertCircle, LogIn, UserPlus, User as UserIcon, LogOut } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import API_BASE from '../config';
 
 const TrackComplaint = () => {
   const { isAuthenticated, user, logout } = useAuth();
@@ -19,7 +20,7 @@ const TrackComplaint = () => {
     setErrorMsg('');
 
     try {
-      const res = await fetch(`/api/complaints/${complaintId.trim()}/`);
+      const res = await fetch(`${API_BASE}/complaints/${complaintId.trim()}/`);
       if (res.ok) {
         const json = await res.json();
         setData(json);

@@ -6,6 +6,7 @@ import {
   PolarGrid, PolarAngleAxis, Legend, LineChart, Line,
 } from 'recharts';
 import { Hexagon, BarChart2, Trophy, Clock, Landmark, AlertTriangle, Medal, TrendingUp, MapPin } from 'lucide-react';
+import API_BASE from '../config';
 
 /* -- colour helpers -- */
 const scoreColor = (score) => {
@@ -57,9 +58,9 @@ const Dashboard = () => {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/health-scores/').then(r => r.json()),
-      fetch('/api/councillors/').then(r => r.json()),
-      fetch('/api/trends/').then(r => r.json()),
+      fetch(`${API_BASE}/health-scores/`).then(r => r.json()),
+      fetch(`${API_BASE}/councillors/`).then(r => r.json()),
+      fetch(`${API_BASE}/trends/`).then(r => r.json()),
     ]).then(([health, council, trends]) => {
       setHealthData(health);
       setCouncillorData(council);

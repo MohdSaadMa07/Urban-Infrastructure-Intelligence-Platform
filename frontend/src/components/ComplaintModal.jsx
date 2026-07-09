@@ -1,10 +1,11 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   AlertCircle, Droplet, Waves, Trash2, Lightbulb, 
   Car, ClipboardList, Megaphone, MapPin, CheckCircle, 
   Map as MapIcon, Image as ImageIcon, X, MessageSquare, Smartphone, ExternalLink
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import API_BASE from '../config';
 
 const CATEGORIES = [
   { value: 'pothole',     label: 'Potholes',      icon: <AlertCircle size={20} /> },
@@ -44,7 +45,7 @@ const ComplaintModal = ({ onClose }) => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    fetch('/api/public/config/')
+    fetch(`${API_BASE}/public/config/`)
       .then(r => r.json())
       .then(setWhatsappConfig)
       .catch(() => {});
@@ -82,7 +83,7 @@ const ComplaintModal = ({ onClose }) => {
       (pos) => {
         const { latitude, longitude } = pos.coords;
         // Identify ward from backend
-        fetch(`/api/identify-ward/?lat=${latitude}&lng=${longitude}`)
+        fetch(`${API_BASE}/identify-ward/?lat=${latitude}&lng=${longitude}`)
           .then(r => r.json())
           .then(data => {
             setForm(f => ({
@@ -156,7 +157,7 @@ const ComplaintModal = ({ onClose }) => {
         payload.append('image', imageFile);
       }
 
-      const res = await fetch('/api/complaints/submit/', {
+      const res = await fetch(`${API_BASE}/complaints/submit/`, {
         method: 'POST',
         body: payload,
       });

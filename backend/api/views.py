@@ -1,13 +1,30 @@
-from django.shortcuts import render
-from django.http import JsonResponse
+import csv
+import json
+import logging
+import time
+from pathlib import Path
+
+from django.db.models import Count, Max, Q
+from django.http import JsonResponse, FileResponse
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.contrib.gis.geos import Point
-from api.models import Ward, CivicMetrics, Complaint
+
+from api.models import Ward, CivicMetrics, Complaint, PortalMetrics, WardPrediction
 from api.services.health_score import compute_health_score
 from api.serializers import WardSerializer
-import json
+from ml.anomaly import detect_category_anomalies
+from ml.briefing import generate_ward_briefing
+from ml.ward_insights import compute_ward_category_scores
+from .twilio_views import send_status_update
+
+logger = logging.getLogger(__name__)
+
+_escalation_cache = None
+_escalation_cache_ttl = 0
 
 def home(request):
     return JsonResponse({
@@ -67,18 +84,10 @@ def wards_geojson(request):
 
 @api_view(['GET'])
 def health_scores(request):
-    """
-    Return health scores for all wards, including underlying metrics
-    and a qualitative label (Good / Moderate / Poor).
-
-    Optional query params:
-        ?ward=<ward_name>   -- filter to a single ward
-        ?year=<year>        -- use metrics from a specific year (default: latest)
-    """
     ward_filter = request.GET.get('ward')
     year_filter = request.GET.get('year')
 
-    wards = Ward.objects.all()
+    wards = Ward.objects.all().prefetch_related('metrics')
     if ward_filter:
         wards = wards.filter(ward_name__iexact=ward_filter.strip())
 
@@ -199,15 +208,20 @@ def submit_complaint(request):
 
 @api_view(['GET'])
 def list_complaints(request):
-    """List complaints, optionally filtered by ward name."""
     ward_name = request.GET.get('ward')
-    qs = Complaint.objects.select_related('ward').all()
+    qs = Complaint.objects.select_related('ward').all().order_by('-created_at')
 
     if ward_name:
         qs = qs.filter(ward__ward_name__iexact=ward_name.strip())
 
-    data = [
-        {
+    paginator = PageNumberPagination()
+    paginator.page_size = 50
+    paginator.page_size_query_param = 'page_size'
+    paginator.max_page_size = 500
+    page = paginator.paginate_queryset(qs, request)
+
+    def serialize(c):
+        return {
             'id': c.id,
             'category': c.get_category_display(),
             'description': c.description,
@@ -219,33 +233,23 @@ def list_complaints(request):
             'ward_name': c.ward.ward_name,
             'created_at': c.created_at.isoformat(),
         }
-        for c in qs
-    ]
 
-    return Response(data)
+    if page is not None:
+        return paginator.get_paginated_response([serialize(c) for c in page])
+
+    return Response([serialize(c) for c in qs])
 
 
 @api_view(['GET'])
 def councillors(request):
-    """
-    Return councillor accountability data for all wards.
-
-    Optional query params:
-        ?year=<year>  -- filter to a specific year (default: latest)
-
-    Returns per-ward: ward info, avg_councillors, total_deliberations,
-    per_capita_deliberations, and a normalised engagement score (0-100).
-    """
     year_filter = request.GET.get('year')
 
     if not year_filter:
-        from django.db.models import Max
-        # Default to the latest year with active deliberations/councillors (since 2024-2026 has no elected councillors)
         active_year = CivicMetrics.objects.filter(total_deliberations__gt=0).aggregate(Max('year'))['year__max']
         if active_year:
             year_filter = active_year
 
-    wards = Ward.objects.all()
+    wards = Ward.objects.all().prefetch_related('metrics')
     results = []
 
     for ward in wards:
@@ -289,10 +293,9 @@ def councillor_ward_dashboard(request):
     try:
         return _councillor_ward_dashboard(request)
     except Exception as e:
-        import traceback
+        logger.exception("Dashboard error for user %s", request.user.username)
         return Response({
-            'error': f'Dashboard error: {str(e)}',
-            'detail': traceback.format_exc(),
+            'error': 'Dashboard error occurred. Please try again later.',
         }, status=500)
 
 def _councillor_ward_dashboard(request):
@@ -306,14 +309,11 @@ def _councillor_ward_dashboard(request):
 
     ward_info = WardSerializer(ward).data
 
-    # Latest CivicMetrics (pure Praja historical data)
     latest_metrics = ward.metrics.order_by('-year').first()
     health = None
     if latest_metrics:
         health = compute_health_score(latest_metrics)
 
-    # Portal-submitted complaint stats
-    from api.models import PortalMetrics
     portal_stats = PortalMetrics.objects.filter(ward=ward).order_by('-year').first()
     portal_total = portal_stats.total_complaints if portal_stats else 0
     portal_resolved = portal_stats.resolved_complaints if portal_stats else 0
@@ -338,7 +338,6 @@ def _councillor_ward_dashboard(request):
         for c in qs
     ]
 
-    # Fetch the latest ML prediction for this ward (within predicted_data range)
     latest_prediction = ward.predictions.filter(prediction_date__year__lte=2026).order_by('-prediction_date').first()
     prediction_data = None
     if latest_prediction:
@@ -351,8 +350,6 @@ def _councillor_ward_dashboard(request):
             'model_version': latest_prediction.model_version,
         }
 
-    # Fetch focus facility insights using ML ward_insights
-    from ml.ward_insights import compute_ward_category_scores
     db_categories = set(ward.complaints.values_list('category', flat=True))
     mapping = {
         'pothole': 'Roads',
@@ -363,7 +360,7 @@ def _councillor_ward_dashboard(request):
     }
     ward_category_names = {mapping.get(c, c) for c in db_categories}
     category_scores = compute_ward_category_scores(ward.ward_name, ward_category_names)
-    
+
     focus_facility = None
     if category_scores:
         top_facility = category_scores[0]
@@ -385,11 +382,9 @@ def _councillor_ward_dashboard(request):
             'escalation_rate': top_facility['escalation_rate'],
         }
 
-    # 1. Compute major categories from ward's complaints
-    from django.db.models import Count
     complaints_by_cat = ward.complaints.values('category').annotate(count=Count('id')).order_by('-count')
     total_db_count = sum(c['count'] for c in complaints_by_cat)
-    
+
     major_categories = []
     category_choices_dict = dict(Complaint.CATEGORY_CHOICES)
     for c in complaints_by_cat:
@@ -403,13 +398,12 @@ def _councillor_ward_dashboard(request):
             'trend': 'stable',
         })
 
-    # 2. Compute failing categories using city-wide growth patterns from ml.anomaly
-    from ml.anomaly import detect_category_anomalies
     try:
         cat_anom = detect_category_anomalies()
     except Exception:
+        logger.exception("Category anomaly detection failed")
         cat_anom = []
-        
+
     failing_categories = []
     for c in cat_anom:
         failing_categories.append({
@@ -419,7 +413,6 @@ def _councillor_ward_dashboard(request):
         })
     failing_categories.sort(key=lambda x: x['recent_3yr_growth_pct'], reverse=True)
 
-    # ── Ward Metrics History (2019-2025) for trend charts ──────────
     ward_metrics_qs = ward.metrics.filter(year__lte=2025).order_by('year')
     ward_metrics_history = []
     for m in ward_metrics_qs:
@@ -435,8 +428,7 @@ def _councillor_ward_dashboard(request):
             'health_label': hs['label'],
         })
 
-    # ── City-wide rankings and averages ────────────────────────────────
-    all_wards_list = Ward.objects.all()
+    all_wards_list = Ward.objects.all().prefetch_related('metrics')
     rankings_data = []
     city_totals = {'health_score': 0, 'complaints': 0, 'days': 0, 'deliberations': 0}
     city_count = 0
@@ -467,7 +459,6 @@ def _councillor_ward_dashboard(request):
             'per_capita_deliberations': round(city_totals['deliberations'] / city_count, 1),
         }
 
-    # Compute ward's rank
     ward_rankings = {}
     if rankings_data:
         hs_sorted = sorted(rankings_data, key=lambda x: x['health_score'], reverse=True)
@@ -482,7 +473,6 @@ def _councillor_ward_dashboard(request):
             'total_wards': city_count,
         }
 
-    # ── Year-over-year change ──────────────────────────────────────────
     yoy_change = {}
     if len(ward_metrics_history) >= 2:
         latest_yr = ward_metrics_history[-1]
@@ -499,12 +489,9 @@ def _councillor_ward_dashboard(request):
             'health_score_change': round(latest_yr['health_score'] - prev_yr['health_score'], 1),
         }
 
-    # ── 2025 + 2026 ML Predictions ─────────────────────────────────────
     predicted_data = {}
     for pred_year in [2025, 2026]:
-        pred = ward.predictions.filter(
-            prediction_date__year=pred_year
-        ).first()
+        pred = ward.predictions.filter(prediction_date__year=pred_year).first()
         if pred:
             predicted_data[str(pred_year)] = {
                 'predicted_risk': pred.predicted_risk,
@@ -515,11 +502,9 @@ def _councillor_ward_dashboard(request):
                 'recommendation': pred.recommendation,
             }
 
-    # CivicMetrics = pure Praja historical data; PortalMetrics = citizen-submitted
     civic_total = latest_metrics.total_complaints if latest_metrics else 0
     civic_year = latest_metrics.year if latest_metrics else None
 
-    # 3. Construct input structures for the briefing generator
     dashboard_briefing_input = {
         'ward': {'ward_name': ward.ward_name},
         'health_score': health['score'] if health else None,
@@ -527,21 +512,19 @@ def _councillor_ward_dashboard(request):
         'resolved_complaints': round(civic_total * 0.86) if latest_metrics else 0,
         'failing_categories': failing_categories,
     }
-    
+
     prediction_briefing_input = {
         'predicted_risk': latest_prediction.predicted_risk if latest_prediction else 'unknown',
         'predicted_complaints': latest_prediction.predicted_complaints if latest_prediction else None,
         'predicted_health_score': latest_prediction.predicted_health_score if latest_prediction else None,
         'recommendation': latest_prediction.recommendation if latest_prediction else None,
     }
-    
+
     insights_briefing_input = {
         'major_categories': major_categories,
         'failing_categories': failing_categories,
     }
 
-    # 4. Generate the briefing
-    from ml.briefing import generate_ward_briefing
     try:
         briefing_data = generate_ward_briefing(
             dashboard=dashboard_briefing_input,
@@ -550,6 +533,7 @@ def _councillor_ward_dashboard(request):
             ward_name=ward.ward_name
         )
     except Exception as e:
+        logger.exception("Briefing generation failed for ward %s", ward.ward_name)
         briefing_data = {
             'error': f'Could not generate briefing: {str(e)}',
             'sections': {
@@ -578,16 +562,13 @@ def _councillor_ward_dashboard(request):
         'predictions': prediction_data,
         'focus_facility': focus_facility,
         'briefing': briefing_data,
-        # New insight data
         'ward_metrics_history': ward_metrics_history,
         'ward_rankings': ward_rankings,
         'city_averages': city_averages,
         'yoy_change': yoy_change,
         'predicted_data': predicted_data,
-        # Category breakdowns
         'major_categories': major_categories,
         'failing_categories': failing_categories,
-        # Escalation triage data per category
         'escalation_data': _load_escalation_data(),
     })
 
@@ -613,8 +594,6 @@ def get_complaint(request, pk):
 
 @api_view(['PATCH'])
 def update_complaint_status(request, pk):
-    """Update a complaint's status. Sets resolved_at when status becomes resolved."""
-    from django.utils import timezone
     new_status = request.data.get('status')
     if not new_status or new_status not in [c[0] for c in Complaint.STATUS_CHOICES]:
         return Response({'error': 'Invalid or missing status.'}, status=400)
@@ -630,13 +609,11 @@ def update_complaint_status(request, pk):
         complaint.resolved_at = None
     complaint.save()
 
-    # Fire-and-forget WhatsApp notification if Twilio is configured
     if complaint.sender_phone:
         try:
-            from .twilio_views import send_status_update
             send_status_update(complaint.id, new_status, complaint.sender_phone)
         except Exception:
-            pass  # Twilio failure must not break the status update
+            logger.warning("Twilio status update failed for complaint #%s", complaint.id)
 
     return Response({'success': True, 'status': complaint.status, 'resolved_at': complaint.resolved_at})
 
@@ -680,12 +657,16 @@ def trend_data(request):
 
 
 def _load_escalation_data():
-    """Load escalation rates per category from escalation_data.csv."""
-    import csv
-    from pathlib import Path
+    global _escalation_cache, _escalation_cache_ttl
+    now = time.time()
+    if _escalation_cache is not None and now < _escalation_cache_ttl:
+        return _escalation_cache
+
     path = Path(__file__).resolve().parent.parent / 'data' / 'escalation_data.csv'
     if not path.exists():
-        return []
+        _escalation_cache = []
+        _escalation_cache_ttl = now + 60
+        return _escalation_cache
     result = []
     with open(path, newline='', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
@@ -700,45 +681,56 @@ def _load_escalation_data():
                 'escalated': escalated,
                 'escalation_rate': round(escalated / total, 3) if total > 0 else 0,
             })
+    _escalation_cache = result
+    _escalation_cache_ttl = now + 300
     return result
 
 
+_hotspots_cache = {}
+_hotspots_cache_ttl = 0
+
 @api_view(['GET'])
 def complaint_hotspots(request):
-    """
-    Run DBSCAN clustering on complaint coordinates for a ward.
-    Returns cluster centers and member count.
-    """
+    global _hotspot_cache, _hotspot_cache_ttl
+    ward_name = request.GET.get('ward')
+    cache_key = ward_name or '__all__'
+
+    now = time.time()
+    if cache_key in _hotspot_cache and now < _hotspot_cache_ttl:
+        return Response(_hotspot_cache[cache_key])
+
     from sklearn.cluster import DBSCAN
     import numpy as np
 
-    ward_name = request.GET.get('ward')
-    qs = Complaint.objects.select_related('ward').filter(
+    qs = Complaint.objects.filter(
         latitude__isnull=False, longitude__isnull=False
-    )
+    ).order_by('-created_at')[:2000]
     if ward_name:
         qs = qs.filter(ward__ward_name__iexact=ward_name)
 
-    coords = np.array([[c.latitude, c.longitude] for c in qs])
-    if len(coords) < 3:
+    coords_list = [(c.latitude, c.longitude) for c in qs]
+    if len(coords_list) < 3:
+        _hotspot_cache[cache_key] = []
+        _hotspot_cache_ttl = now + 300
         return Response([])
 
+    coords = np.array(coords_list)
     clustering = DBSCAN(eps=0.005, min_samples=2).fit(coords)
     labels = clustering.labels_
 
-    clusters = {}
-    for i, (lat, lng) in enumerate(coords):
+    cluster_map = {}
+    for i, (lat, lng) in enumerate(coords_list):
         label = int(labels[i])
         if label == -1:
             continue
-        if label not in clusters:
-            clusters[label] = {'lats': [], 'lngs': [], 'count': 0}
-        clusters[label]['lats'].append(lat)
-        clusters[label]['lngs'].append(lng)
-        clusters[label]['count'] += 1
+        if label not in cluster_map:
+            cluster_map[label] = {'lats': [], 'lngs': [], 'count': 0}
+        cluster_map[label]['lats'].append(lat)
+        cluster_map[label]['lngs'].append(lng)
+        cluster_map[label]['count'] += 1
 
     result = []
-    for label, data in clusters.items():
+    for label, data in cluster_map.items():
         if data['count'] < 2:
             continue
         result.append({
@@ -748,6 +740,8 @@ def complaint_hotspots(request):
             'count': data['count'],
         })
 
+    _hotspot_cache[cache_key] = result
+    _hotspot_cache_ttl = now + 300
     return Response(result)
 
 
@@ -757,13 +751,8 @@ def complaint_hotspots(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def public_wards(request):
-    """
-    Simplified ward overview for the public dashboard.
-    Returns health label, complaint counts, and a couple headline metrics.
-    No auth required.
-    """
     year = request.GET.get('year')
-    wards = Ward.objects.all().order_by('ward_name')
+    wards = Ward.objects.all().order_by('ward_name').prefetch_related('metrics')
 
     results = []
     for ward in wards:
@@ -792,26 +781,15 @@ def public_wards(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def public_health_summary(request):
-    """
-    Return a city-wide summary for the public landing:
-    - total complaints (all wards)
-    - average health score
-    - best / worst ward names
-    """
-    from django.db.models import Avg
-    all_wards = Ward.objects.all()
+    all_wards = Ward.objects.all().prefetch_related('metrics')
     health_scores = []
-    best = worst = None
+    total_complaints = 0
     for w in all_wards:
         m = w.metrics.order_by('-year').first()
         if m:
             h = compute_health_score(m)
             health_scores.append({'ward': w.ward_name, 'score': h['score'], 'label': h['label']})
-
-    total_complaints = sum(
-        (w.metrics.order_by('-year').first().total_complaints if w.metrics.order_by('-year').first() else 0)
-        for w in all_wards
-    )
+            total_complaints += m.total_complaints or 0
 
     if health_scores:
         avg_health = round(sum(s['score'] for s in health_scores) / len(health_scores), 1)
@@ -819,6 +797,8 @@ def public_health_summary(request):
         worst = min(health_scores, key=lambda x: x['score'])
     else:
         avg_health = None
+        best = None
+        worst = None
 
     return Response({
         'total_complaints': total_complaints,
@@ -835,10 +815,10 @@ def public_health_summary(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def public_config(request):
-    from django.conf import settings
-    raw = settings.TWILIO_WHATSAPP_NUMBER or ''
+    from django.conf import settings as dj_settings
+    raw = dj_settings.TWILIO_WHATSAPP_NUMBER or ''
     number = raw.replace('whatsapp:', '').strip()
-    twilio_configured = bool(settings.TWILIO_ACCOUNT_SID and number and 'your_account' not in settings.TWILIO_ACCOUNT_SID)
+    twilio_configured = bool(dj_settings.TWILIO_ACCOUNT_SID and number and 'your_account' not in dj_settings.TWILIO_ACCOUNT_SID)
     return Response({
         'whatsapp_number': number or None,
         'whatsapp_link': f'https://wa.me/{number.replace("+", "")}?text=Hello' if number else None,
@@ -852,9 +832,7 @@ def public_config(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def download_ward_report(request):
-    """Generate and return a PDF report for the councillor's ward."""
     from api.services.report_generator import generate_ward_report
-    from django.http import FileResponse
     profile = request.user.profile
     if profile.role != 'councillor':
         return Response({'error': 'Councillor access required.'}, status=403)
@@ -867,4 +845,4 @@ def download_ward_report(request):
     if not filepath or not filepath.exists():
         return Response({'error': 'Report could not be generated.'}, status=500)
 
-    return FileResponse(open(filepath, 'rb'), as_attachment=True, filename=filepath.name)
+    return FileResponse(filepath.open('rb'), as_attachment=True, filename=filepath.name)

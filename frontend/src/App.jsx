@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-do
 import { Map, BarChart2, Activity, ShieldCheck, Megaphone, Hexagon, ArrowDown, LogIn, UserPlus, User as UserIcon, LogOut, MessageSquare, Smartphone, Camera, MapPin, CheckCircle, ExternalLink, Search, Crosshair, TrendingUp } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import API_BASE from './config';
 import MumbaiMap from './components/MumbaiMap';
 import WardDetailPanel from './components/WardDetailPanel';
 import ComplaintModal from './components/ComplaintModal';
@@ -60,7 +61,7 @@ function LandingPage() {
   const { isAuthenticated, user } = useAuth();
 
   React.useEffect(() => {
-    fetch('/api/public/config/')
+    fetch(`${API_BASE}/public/config/`)
       .then(r => r.json())
       .then(setWhatsappConfig)
       .catch(() => {});

@@ -1,6 +1,7 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import API_BASE from '../config';
 
 // Health score color mapping -- transparent fills
 const getHealthColor = (label) => {
@@ -20,8 +21,8 @@ const MumbaiMap = ({ onWardClick }) => {
   useEffect(() => {
     // Fetch GeoJSON and health scores in parallel
     Promise.all([
-      fetch('/api/wards-geojson/').then(r => r.json()),
-      fetch('/api/health-scores/').then(r => r.json()),
+      fetch(`${API_BASE}/wards-geojson/`).then(r => r.json()),
+      fetch(`${API_BASE}/health-scores/`).then(r => r.json()),
     ])
       .then(([geo, scores]) => {
         // Build a lookup: ward_name -> full score data

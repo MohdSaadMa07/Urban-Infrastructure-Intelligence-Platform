@@ -21,7 +21,8 @@ from api.models import Complaint, Ward
 logger = logging.getLogger(__name__)
 
 # ── In-memory conversation state per sender (phone) ──────────────────────
-# In production, replace with Redis / DB.
+# WARNING: In-memory only. State is lost on server restart.
+# NOTE: A Redis-backed session store migration is required for production.
 CONV_STORE: dict[str, dict] = {}
 
 CONV_STEPS = frozenset({'category', 'description', 'photo', 'location', 'confirm', 'done'})

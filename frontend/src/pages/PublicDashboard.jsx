@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { Hexagon, MapPin, Search, Smartphone, AlertCircle, CheckCircle, TrendingUp, ShieldCheck, MessageSquare, ExternalLink } from 'lucide-react';
+import API_BASE from '../config';
 
 const LABEL_COLORS = {
   'Good': { bg: 'rgba(34,197,94,0.15)', text: '#4ade80' },
@@ -21,9 +22,9 @@ const PublicDashboard = () => {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/public/wards/').then(r => r.json()),
-      fetch('/api/public/summary/').then(r => r.json()),
-      fetch('/api/public/config/').then(r => r.json()),
+      fetch(`${API_BASE}/public/wards/`).then(r => r.json()),
+      fetch(`${API_BASE}/public/summary/`).then(r => r.json()),
+      fetch(`${API_BASE}/public/config/`).then(r => r.json()),
     ]).then(([w, s, c]) => {
       setWards(w);
       setSummary(s);
@@ -36,7 +37,7 @@ const PublicDashboard = () => {
     setTrackError('');
     setTrackResult(null);
     try {
-      const res = await fetch(`/api/complaints/${trackId.trim()}/`);
+      const res = await fetch(`${API_BASE}/complaints/${trackId.trim()}/`);
       if (!res.ok) { setTrackError('Complaint not found. Check the ID and try again.'); return; }
       setTrackResult(await res.json());
     } catch {

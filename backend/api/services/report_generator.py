@@ -76,7 +76,7 @@ def _health_label(score: float | None) -> str:
         return 'No Data'
     if score >= 70:
         return 'Good'
-    if score >= 40:
+    if score >= 45:
         return 'Moderate'
     return 'Poor'
 
@@ -154,7 +154,7 @@ def _generate_ward_report(ward_name: str) -> Path | None:
     pdf.set_font('Helvetica', '', 10)
     pdf.set_text_color(*DARK)
     for line in cat_lines:
-        pdf.cell(0, 6, f'  \u2022 {line}', new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, f'  - {line}', new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(4)
 
@@ -181,7 +181,8 @@ def _generate_ward_report(ward_name: str) -> Path | None:
             pdf.cell(0, 6, f'... and {len(recent) - 25} more', new_x="LMARGIN", new_y="NEXT")
 
     # ── Save ──
-    filename = f'ward_{ward.ward_name.lower().replace(" ", "_")}_{date.today().isoformat()}.pdf'
+    safe_name = ward.ward_name.lower().replace(" ", "_").replace("/", "_").replace("\\", "_")
+    filename = f'ward_{safe_name}_{date.today().isoformat()}.pdf'
     filepath = REPORT_DIR / filename
     pdf.output(str(filepath))
     return filepath
