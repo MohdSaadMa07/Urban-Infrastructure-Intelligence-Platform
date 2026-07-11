@@ -62,4 +62,4 @@ echo "Seeding complaints for map..."
 python manage.py seed_complaints
 echo "Seed data loaded."
 
-exec gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 4 --timeout 120
+exec gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --log-level debug --error-logfile -
