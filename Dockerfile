@@ -28,7 +28,6 @@ RUN npm run build
 FROM backend AS final
 RUN mkdir -p /frontend
 COPY --from=frontend /app/dist /frontend/dist
-RUN python manage.py collectstatic --noinput
 RUN chmod +x entrypoint.sh
 
 EXPOSE 8000
