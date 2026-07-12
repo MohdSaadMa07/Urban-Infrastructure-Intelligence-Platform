@@ -43,7 +43,18 @@ def build_feature_matrix(years=None, training=False, horizon=1):
         y_risk: pd.Series of risk labels (Low/Medium/High)
         y_complaints: pd.Series of total_complaints for regression
     """
-    from api.models import CivicMetrics, Ward
+    from api.models import CivicMetrics, Ward, PortalMetrics
+
+    # Build lookup: (ward_id, year) -> PortalMetrics row
+    portal_qs = PortalMetrics.objects.all()
+    portal_map = {}
+    for p in portal_qs:
+        key = (p.ward_id, p.year)
+        if key in portal_map:
+            portal_map[key].total_complaints += p.total_complaints
+            portal_map[key].resolved_complaints += p.resolved_complaints
+        else:
+            portal_map[key] = p
 
     # --- Step 1: Load base metrics (CivicMetrics = pure Praja data only) ---
     qs = CivicMetrics.objects.select_related("ward").all()
@@ -56,6 +67,13 @@ def build_feature_matrix(years=None, training=False, horizon=1):
         total = m.total_complaints or 0
         closed = m.closed_complaints or 0
         escalated = m.escalated_complaints or 0
+
+        # Augment with portal-submitted complaints for this (ward, year)
+        portal_key = (ward.id, m.year)
+        if portal_key in portal_map:
+            p = portal_map[portal_key]
+            total += p.total_complaints
+            closed += p.resolved_complaints
 
         row = {
             "ward_no": ward.ward_no,
@@ -73,6 +91,39 @@ def build_feature_matrix(years=None, training=False, horizon=1):
         }
         row["resolution_rate"] = round(closed / total, 4) if total > 0 else 0
         row["escalation_rate"] = round(escalated / total, 4) if total > 0 else 0
+        row["health_score"] = _compute_health_score_from_row(row)
+        rows.append(row)
+
+    # Also include PortalMetrics-only years (new annual data without CivicMetrics)
+    # by carrying forward the previous year's CivicMetrics for each ward.
+    civic_years_by_ward = {}
+    for r in rows:
+        civic_years_by_ward.setdefault(r["ward_name"], []).append(r)
+
+    for (ward_id, year), p in portal_map.items():
+        ward_obj = Ward.objects.filter(id=ward_id).first()
+        if not ward_obj:
+            continue
+        ward_name = ward_obj.ward_name
+        ward_no = ward_obj.ward_no
+        # Only add if this (ward, year) isn't already in CivicMetrics
+        existing = [r for r in rows if r["ward_name"] == ward_name and r["year"] == year]
+        if existing:
+            continue
+        # Carry forward from last CivicMetrics year for this ward
+        previous = [r for r in rows if r["ward_name"] == ward_name and r["year"] < year]
+        if previous:
+            base = max(previous, key=lambda r: r["year"])
+        else:
+            continue
+        total = p.total_complaints
+        closed = p.resolved_complaints
+        row = dict(base)
+        row["year"] = year
+        row["total_complaints"] = total
+        row["closed_complaints"] = closed
+        row["pending_complaints"] = total - closed
+        row["resolution_rate"] = round(closed / total, 4) if total > 0 else 0
         row["health_score"] = _compute_health_score_from_row(row)
         rows.append(row)
 

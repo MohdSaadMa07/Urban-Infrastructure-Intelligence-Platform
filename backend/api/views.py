@@ -338,7 +338,8 @@ def _councillor_ward_dashboard(request):
         for c in qs
     ]
 
-    latest_prediction = ward.predictions.filter(prediction_date__year__lte=2026).order_by('-prediction_date').first()
+    max_pred_year = ward.predictions.aggregate(m=Max('prediction_date__year'))['m']
+    latest_prediction = ward.predictions.filter(prediction_date__year=max_pred_year).first() if max_pred_year else None
     prediction_data = None
     if latest_prediction:
         prediction_data = {
@@ -413,7 +414,8 @@ def _councillor_ward_dashboard(request):
         })
     failing_categories.sort(key=lambda x: x['recent_3yr_growth_pct'], reverse=True)
 
-    ward_metrics_qs = ward.metrics.filter(year__lte=2025).order_by('year')
+    max_metric_year = ward.metrics.aggregate(m=Max('year'))['m'] or 9999
+    ward_metrics_qs = ward.metrics.filter(year__lte=max_metric_year).order_by('year')
     ward_metrics_history = []
     for m in ward_metrics_qs:
         hs = compute_health_score(m)
@@ -490,17 +492,16 @@ def _councillor_ward_dashboard(request):
         }
 
     predicted_data = {}
-    for pred_year in [2025, 2026]:
-        pred = ward.predictions.filter(prediction_date__year=pred_year).first()
-        if pred:
-            predicted_data[str(pred_year)] = {
-                'predicted_risk': pred.predicted_risk,
-                'predicted_complaints': pred.predicted_complaints,
-                'predicted_complaints_lower': pred.predicted_complaints_lower,
-                'predicted_complaints_upper': pred.predicted_complaints_upper,
-                'predicted_health_score': pred.predicted_health_score,
-                'recommendation': pred.recommendation,
-            }
+    for pred in ward.predictions.all():
+        pred_year = pred.prediction_date.year
+        predicted_data[str(pred_year)] = {
+            'predicted_risk': pred.predicted_risk,
+            'predicted_complaints': pred.predicted_complaints,
+            'predicted_complaints_lower': pred.predicted_complaints_lower,
+            'predicted_complaints_upper': pred.predicted_complaints_upper,
+            'predicted_health_score': pred.predicted_health_score,
+            'recommendation': pred.recommendation,
+        }
 
     civic_total = latest_metrics.total_complaints if latest_metrics else 0
     civic_year = latest_metrics.year if latest_metrics else None
