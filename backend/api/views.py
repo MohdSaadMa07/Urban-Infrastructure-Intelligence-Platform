@@ -845,4 +845,84 @@ def download_ward_report(request):
     if not filepath or not filepath.exists():
         return Response({'error': 'Report could not be generated.'}, status=500)
 
-    return FileResponse(filepath.open('rb'), as_attachment=True, filename=filepath.name)
+    return FileResponse(filepath.open('rb'), as_attachment=True, filename=filepath.name)
+
+
+import os
+from datetime import date
+from django.conf import settings
+
+@api_view(['POST', 'GET'])
+@permission_classes([AllowAny])
+def cron_retrain(request):
+    """
+    Cron endpoint for daily model retraining and prediction regeneration.
+    Protected by CRON_API_KEY env var (passed as X-API-Key header or ?key= param).
+    """
+    expected_key = os.environ.get('CRON_API_KEY', '')
+    if expected_key:
+        provided = request.headers.get('X-API-Key', '') or request.GET.get('key', '')
+        if provided != expected_key:
+            return Response({'status': 'error', 'message': 'Invalid API key.'}, status=403)
+
+    from api.tasks import sync_complaints_to_portal_metrics
+    from ml.features import build_feature_matrix
+    from ml.train import train_risk_model, train_forecast_model, train_clustering
+    from ml.predict import generate_predictions as run_prediction
+    from ml.utils import load_model, RISK_MODEL_PATH
+    from api.models import WardPrediction, Ward
+
+    sync_complaints_to_portal_metrics()
+
+    X, y_risk, y_complaints, _ = build_feature_matrix(training=True)
+    train_risk_model(X, y_risk)
+    train_forecast_model(X, y_complaints, horizon=1)
+
+    X_n2, _, y_complaints_n2, _ = build_feature_matrix(training=True, horizon=2)
+    train_forecast_model(X_n2, y_complaints_n2, horizon=2)
+
+    train_clustering(X)
+
+    if not RISK_MODEL_PATH.exists():
+        return Response({'status': 'error', 'message': 'Models not found after training.'}, status=500)
+
+    latest_metric_year = None
+    from api.models import CivicMetrics
+    latest_metric_year = CivicMetrics.objects.order_by("-year").values_list("year", flat=True).first()
+    if not latest_metric_year:
+        latest_metric_year = date.today().year
+
+    total_predictions = 0
+    for horizon in [1, 2]:
+        target_year = latest_metric_year + horizon
+        try:
+            results, ty = run_prediction(target_year=target_year, horizon=horizon)
+        except Exception:
+            continue
+        if not results:
+            continue
+        for r in results:
+            ward = Ward.objects.filter(ward_name=r["ward_name"]).first()
+            if not ward:
+                continue
+            WardPrediction.objects.update_or_create(
+                ward=ward,
+                prediction_date=date(target_year, 1, 1),
+                defaults={
+                    "predicted_risk": r["predicted_risk"].lower(),
+                    "predicted_complaints": r["predicted_complaints"],
+                    "predicted_complaints_lower": r.get("predicted_complaints_lower"),
+                    "predicted_complaints_upper": r.get("predicted_complaints_upper"),
+                    "predicted_health_score": r["predicted_health_score"],
+                    "recommendation": r["recommendation"],
+                    "top_features": r.get("top_features"),
+                    "model_version": f"xgboost-v1-{target_year}",
+                }
+            )
+            total_predictions += 1
+
+    return Response({
+        'status': 'success',
+        'rows_trained': len(X),
+        'predictions_generated': total_predictions,
+    })

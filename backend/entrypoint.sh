@@ -57,6 +57,10 @@ for ward in Ward.objects.all():
     else:
         print(f'  Reset password for: {username} (Ward {ward.ward_name})')
 "
+# Train ML models (ensures fresh models on every deploy)
+echo "Training ML models..."
+python manage.py train_models
+
 # Seed realistic complaints with lat/lng for map visibility
 echo "Seeding complaints for map..."
 python manage.py seed_complaints

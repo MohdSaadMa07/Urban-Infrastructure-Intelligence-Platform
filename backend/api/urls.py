@@ -6,7 +6,7 @@ from .views import (
     get_complaint, update_complaint_status, trend_data,
     councillor_ward_dashboard, complaint_hotspots,
     public_wards, public_health_summary, public_config,
-    download_ward_report,
+    download_ward_report, cron_retrain,
 )
 from .auth_views import register, login_view, profile, logout_view
 from .twilio_views import whatsapp_webhook
@@ -45,6 +45,8 @@ urlpatterns = [
     path('twilio/webhook/', whatsapp_webhook, name='twilio-webhook'),
     # PDF report download
     path('reports/download/', download_ward_report, name='download-ward-report'),
+    # Cron / nightly maintenance
+    path('cron/retrain/', cron_retrain, name='cron-retrain'),
     # Auth
     path('auth/register/', register, name='auth-register'),
     path('auth/login/', login_view, name='auth-login'),
