@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier, XGBRegressor
 
-from ml.utils import save_model, RISK_MODEL_PATH, FORECAST_MODEL_PATH, FORECAST_LOWER_PATH, FORECAST_UPPER_PATH, CLUSTER_MODEL_PATH, SCALER_PATH, FEATURES_PATH
+from ml.utils import save_model, RISK_MODEL_PATH, FORECAST_MODEL_PATH, FORECAST_LOWER_PATH, FORECAST_UPPER_PATH, FORECAST_N2_MODEL_PATH, FORECAST_N2_LOWER_PATH, FORECAST_N2_UPPER_PATH, CLUSTER_MODEL_PATH, SCALER_PATH, FEATURES_PATH
 
 
 def _label_encode(y_risk):
@@ -62,7 +62,7 @@ def _train_quantile_model(X_train_s, y_train, alpha, path, label):
     return model
 
 
-def train_forecast_model(X, y_complaints):
+def train_forecast_model(X, y_complaints, horizon=1):
     """Train XGBRegressor quantile models (0.1, 0.5, 0.9). Returns (model, R^2)."""
     X_train, X_test, y_train, y_test = train_test_split(
         X, y_complaints.values, test_size=0.2, random_state=42
@@ -77,15 +77,17 @@ def train_forecast_model(X, y_complaints):
     X_train_s = scaler.transform(X_train[expected_cols])
     X_test_s = scaler.transform(X_test[expected_cols])
 
-    # Median (0.5) for point predictions
-    model = _train_quantile_model(X_train_s, y_train, 0.5, FORECAST_MODEL_PATH, "forecast (median)")
-
-    # Lower bound (0.1) and upper bound (0.9) for intervals
-    _train_quantile_model(X_train_s, y_train, 0.1, FORECAST_LOWER_PATH, "forecast (lower)")
-    _train_quantile_model(X_train_s, y_train, 0.9, FORECAST_UPPER_PATH, "forecast (upper)")
+    if horizon == 2:
+        model = _train_quantile_model(X_train_s, y_train, 0.5, FORECAST_N2_MODEL_PATH, f"forecast N+2 (median)")
+        _train_quantile_model(X_train_s, y_train, 0.1, FORECAST_N2_LOWER_PATH, f"forecast N+2 (lower)")
+        _train_quantile_model(X_train_s, y_train, 0.9, FORECAST_N2_UPPER_PATH, f"forecast N+2 (upper)")
+    else:
+        model = _train_quantile_model(X_train_s, y_train, 0.5, FORECAST_MODEL_PATH, "forecast N+1 (median)")
+        _train_quantile_model(X_train_s, y_train, 0.1, FORECAST_LOWER_PATH, "forecast N+1 (lower)")
+        _train_quantile_model(X_train_s, y_train, 0.9, FORECAST_UPPER_PATH, "forecast N+1 (upper)")
 
     r2 = model.score(X_test_s, y_test)
-    print(f"  Forecast model R^2: {r2:.3f}")
+    print(f"  Forecast (horizon={horizon}) model R^2: {r2:.3f}")
     return model, r2
 
 

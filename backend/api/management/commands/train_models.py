@@ -35,8 +35,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('\nTraining risk classification model (XGBoost)...'))
         train_risk_model(X, y_risk)
 
-        self.stdout.write(self.style.NOTICE('\nTraining forecast model (XGBoost)...'))
-        train_forecast_model(X, y_complaints)
+        self.stdout.write(self.style.NOTICE('\nTraining forecast model N+1 (XGBoost)...'))
+        train_forecast_model(X, y_complaints, horizon=1)
+
+        self.stdout.write(self.style.NOTICE('\nTraining forecast model N+2 (XGBoost)...'))
+        X_n2, _, y_complaints_n2, _ = build_feature_matrix(training=True, horizon=2)
+        train_forecast_model(X_n2, y_complaints_n2, horizon=2)
 
         self.stdout.write(self.style.NOTICE('\nRunning DBSCAN clustering...'))
         train_clustering(X)

@@ -27,7 +27,7 @@ def _compute_health_score_from_row(row):
     return round(max(0.0, min(100.0, raw)), 2)
 
 
-def build_feature_matrix(years=None, training=False):
+def build_feature_matrix(years=None, training=False, horizon=1):
     """
     Build feature matrix and target vectors from CivicMetrics.
 
@@ -36,6 +36,7 @@ def build_feature_matrix(years=None, training=False):
 
     Args:
         years: iterable of years to include (default: all available)
+        horizon: number of years ahead to shift targets when training (1 or 2)
 
     Returns:
         X: pd.DataFrame of features
@@ -109,9 +110,9 @@ def build_feature_matrix(years=None, training=False):
     y_risk = df["health_score"].apply(risk_label)
     y_complaints = df["total_complaints"]
 
-    # When training, shift target so T features predict T+1 complaints
+    # When training, shift target so T features predict T+horizon complaints
     if training:
-        y_complaints = df.groupby("ward_name")["total_complaints"].shift(-1)
+        y_complaints = df.groupby("ward_name")["total_complaints"].shift(-horizon)
         valid = y_complaints.notna()
 
     # Feature columns (exclude identifiers and targets)

@@ -68,13 +68,14 @@ def generate_predictions():
     base_year = max(existing_years) + 1 if existing_years else date.today().year
     years_to_predict = [y for y in [base_year, base_year + 1] if y not in existing_years]
 
-    results_prev = None
     total_created = 0
+    predictions = []
     for target_year in sorted(years_to_predict):
+        horizon = target_year - base_year + 1
         try:
-            results, ty = run_prediction(target_year=target_year, previous_predictions=results_prev)
-        except Exception:
-            results, ty = run_prediction(target_year=target_year)
+            results, ty = run_prediction(target_year=target_year, horizon=horizon)
+        except Exception as e:
+            continue
         if not results:
             continue
         for r in results:
@@ -96,7 +97,7 @@ def generate_predictions():
                 }
             )
             total_created += 1
-        results_prev = results
+        predictions.append((target_year, len(results)))
 
     return {
         "status": "success",
@@ -118,7 +119,11 @@ def retrain_models():
 
     X, y_risk, y_complaints, _ = build_feature_matrix(training=True)
     train_risk_model(X, y_risk)
-    train_forecast_model(X, y_complaints)
+    train_forecast_model(X, y_complaints, horizon=1)
+
+    X_n2, _, y_complaints_n2, _ = build_feature_matrix(training=True, horizon=2)
+    train_forecast_model(X_n2, y_complaints_n2, horizon=2)
+
     train_clustering(X)
     return {"status": "success", "rows": len(X)}
 
