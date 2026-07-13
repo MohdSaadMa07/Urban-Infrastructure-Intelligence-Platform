@@ -4,7 +4,7 @@ Seasonal advisory system for ward-level complaint categories.
 Uses known Mumbai seasonality patterns to generate proactive warnings
 before complaint surges occur. No ML — pure rule-based calendar logic.
 
-Monsoon:  Jun-Sep    → Drainage, Roads/Potholes, Pest Control surge
+Monsoon:  Jun-Sep    → Drainage, Roads/Potholes surge
 Summer:   Mar-May    → Water Supply peaks
 Winter:   Nov-Feb    → Streetlights slightly up (shorter days)
 Garbage:  Flat year-round
@@ -45,13 +45,6 @@ SEASONAL_PROFILES = {
         'surge_factor': 2.0,
         'reason': 'Summer heat — water demand spikes and supply becomes erratic.',
         'advice': 'Schedule water tanker deployments in advance. Identify wards with chronic shortages and pre-position reserves.',
-    },
-    'pest control': {
-        'peak_months': [6, 7, 8, 9],
-        'ramp_up_months': [5],
-        'surge_factor': 2.0,
-        'reason': 'Monsoon breeding season — mosquito and pest populations explode in stagnant water.',
-        'advice': 'Step up fogging and larvicide spraying before monsoon. Clear water-logged areas that serve as breeding grounds.',
     },
     'streetlight': {
         'peak_months': [11, 12, 1],
@@ -123,7 +116,7 @@ def generate_seasonal_advisories(anomaly_results, ward_name, current_month=None)
 
     advisories = []
     for cat, profile in SEASONAL_PROFILES.items():
-        if cat not in cat_lookup and cat not in ('pest control',):
+        if cat not in cat_lookup:
             continue
 
         info = cat_lookup.get(cat, {})
@@ -134,7 +127,6 @@ def generate_seasonal_advisories(anomaly_results, ward_name, current_month=None)
         severity = info.get('severity', 'normal')
 
         status = _season_status(profile, current_month)
-        next_status = _season_status(profile, check_months[1][1])
         upcoming_peak = any(
             _season_status(profile, m) == 'peak_season'
             for m, _ in check_months
