@@ -517,12 +517,14 @@ erDiagram
 ```mermaid
 sequenceDiagram
     participant Citizen
+    participant Web as Web Browser
     participant WhatsApp
     participant Twilio
     participant API as Django API
     participant DB as PostgreSQL
     participant ML as ML Module
     participant CSV as CSV Data
+    participant Councillor
 
     Note over Citizen,CSV: Complaint Filing Flow
 
@@ -536,20 +538,33 @@ sequenceDiagram
     Web->>API: POST /api/complaints/submit/
     API->>DB: INSERT Complaint
     DB-->>API: complaint_id
-    API-->>Web: { success, complaint_id }
+    API-->>Web: success response
 
     Note over Citizen,CSV: WhatsApp Flow
 
     Citizen->>WhatsApp: "Hi"
     WhatsApp->>Twilio: POST /api/twilio/webhook/
     Twilio->>API: Start conversation
-    API-->>Twilio: TwiML: "Select category"
+    API-->>Twilio: TwiML select category
     Twilio-->>WhatsApp: Reply
     Citizen->>WhatsApp: "Pothole"
-    WhatsApp->>Twilio: POST /api/twilio/webhook/
+    WhatsApp->>Twilio: POST webhook
     Twilio->>API: Extract + store
-    API-->>Twilio: TwiML: "Describe issue"
-    ... (continues: photo, location, confirm)
+    API-->>Twilio: TwiML describe issue
+    Citizen->>WhatsApp: "Deep pothole on Main Road"
+    WhatsApp->>Twilio: POST webhook
+    Twilio->>API: Store description
+    API-->>Twilio: TwiML send photo
+    Citizen->>WhatsApp: photo
+    WhatsApp->>Twilio: POST webhook
+    Twilio->>API: Download + store image
+    API-->>Twilio: TwiML share location
+    Citizen->>WhatsApp: location
+    WhatsApp->>Twilio: POST webhook
+    Twilio->>API: Reverse geocode ward
+    API->>DB: boundary__contains query
+    DB-->>API: ward match
+    API-->>Twilio: TwiML confirm + done
     API->>DB: INSERT Complaint
 
     Note over Citizen,CSV: Dashboard Flow
@@ -558,11 +573,11 @@ sequenceDiagram
     Web->>API: GET /api/councillor/dashboard/
     API->>DB: Ward + CivicMetrics + Complaints
     API->>ML: detect_category_anomalies()
-    ML->>CSV: Read 18 categories × 13 years
+    ML->>CSV: Read 18 categories 13 years
     CSV-->>ML: z-score anomalies
-    API->>ML: generate_seasonal_advisories(anomalies)
-    ML-->>API: Advisory list
-    API-->>Web: Full dashboard JSON
+    API->>ML: generate_seasonal_advisories()
+    ML-->>API: advisory list
+    API-->>Web: full dashboard JSON
 ```
 
 ---
