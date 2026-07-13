@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Hexagon, LogOut, Filter, AlertCircle, CheckCircle,
   MapPin, BarChart3, TrendingUp, RefreshCw, Sparkles, ListTodo, FileText,
-  ArrowUp, ArrowDown, Minus, Award, ChartPie, AlertTriangle
+  ArrowUp, ArrowDown, Minus, Award, ChartPie, AlertTriangle, Calendar
 } from 'lucide-react';
 import {
   RadialBarChart, RadialBar, XAxis, YAxis, CartesianGrid,
@@ -809,6 +809,47 @@ const CouncillorPortal = () => {
                 </ResponsiveContainer>
               </div>
             )})()}
+
+            {/* ── Seasonal Advisories (Proactive) ── */}
+            {d.seasonal_advisories && d.seasonal_advisories.filter(a => a.urgency > 0).length > 0 && (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(56,189,248,0.15)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <Calendar size={16} color="#38bdf8" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#38bdf8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Seasonal Advisory <span className="ml-badge" style={{ background: 'rgba(56,189,248,0.2)', color: '#38bdf8' }}>Forecast</span>
+                  </h3>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto' }}>
+                    Upcoming 2 months
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {d.seasonal_advisories.filter(a => a.urgency > 0).slice(0, 4).map(a => (
+                    <div key={a.category} style={{
+                      display: 'grid', gridTemplateColumns: 'auto 1fr',
+                      gap: '0.75rem', alignItems: 'start',
+                      padding: '0.7rem 0.8rem', borderRadius: 10,
+                      background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(56,189,248,0.08)',
+                    }}>
+                      <span style={{
+                        fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                        textTransform: 'uppercase', whiteSpace: 'nowrap', marginTop: 1,
+                        background: a.season_status === 'peak_season' ? 'rgba(239,68,68,0.2)' :
+                                     a.season_status === 'pre_season' ? 'rgba(251,146,60,0.2)' :
+                                     'rgba(56,189,248,0.2)',
+                        color: a.season_status === 'peak_season' ? '#ef4444' :
+                               a.season_status === 'pre_season' ? '#fb923c' : '#38bdf8',
+                      }}>
+                        {a.season_status === 'pre_season' ? 'Prepare' : a.season_status === 'peak_season' ? 'Active' : 'Watch'}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 600, marginBottom: '0.2rem' }}>{a.display_name}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.5 }}>{a.advisory_text}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ── Rising Issues (ML Anomaly Detection) ── */}
             {d.failing_categories && d.failing_categories.length > 0 && (

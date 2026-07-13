@@ -20,6 +20,7 @@ from ml.anomaly import detect_category_anomalies
 from ml.briefing import generate_ward_briefing
 from ml.ward_insights import compute_ward_category_scores
 from ml.ward_category_anomaly import detect_ward_category_anomalies
+from ml.seasonal_advisory import generate_seasonal_advisories
 from .twilio_views import send_status_update
 
 logger = logging.getLogger(__name__)
@@ -421,6 +422,12 @@ def _councillor_ward_dashboard(request):
         logger.exception("Ward-category anomaly detection failed for ward %s", ward.ward_name)
         ward_cat_anom = []
 
+    try:
+        seasonal_advisories = generate_seasonal_advisories(ward_cat_anom, ward.ward_name)
+    except Exception:
+        logger.exception("Seasonal advisory generation failed for ward %s", ward.ward_name)
+        seasonal_advisories = []
+
     max_metric_year = ward.metrics.aggregate(m=Max('year'))['m'] or 9999
     ward_metrics_qs = ward.metrics.filter(year__lte=max_metric_year).order_by('year')
     ward_metrics_history = []
@@ -578,6 +585,7 @@ def _councillor_ward_dashboard(request):
         'major_categories': major_categories,
         'failing_categories': failing_categories,
         'ward_category_anomalies': ward_cat_anom,
+        'seasonal_advisories': seasonal_advisories,
         'escalation_data': _load_escalation_data(),
     })
 
