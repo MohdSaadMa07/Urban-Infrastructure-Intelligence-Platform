@@ -376,18 +376,27 @@ def _councillor_ward_dashboard(request):
             'escalation_rate': top_facility['escalation_rate'],
         }
 
+    db_to_csv = {
+        'pothole': 'Roads', 'road': 'Roads',
+        'water': 'Water Supply', 'drainage': 'Drainage',
+        'garbage': 'Solid Waste Management',
+        'streetlight': 'Other', 'other': 'Other',
+    }
+
     complaints_by_cat = ward.complaints.values('category').annotate(count=Count('id')).order_by('-count')
     total_db_count = sum(c['count'] for c in complaints_by_cat)
 
-    major_categories = []
-    category_choices_dict = dict(Complaint.CATEGORY_CHOICES)
+    csv_buckets = {}
     for c in complaints_by_cat:
-        cat_code = c['category']
-        cat_display = category_choices_dict.get(cat_code, cat_code)
-        pct = round(c['count'] / total_db_count * 100, 1) if total_db_count > 0 else 0
+        csv_name = db_to_csv.get(c['category'], 'Other')
+        csv_buckets[csv_name] = csv_buckets.get(csv_name, 0) + c['count']
+
+    major_categories = []
+    for csv_name, count in sorted(csv_buckets.items(), key=lambda x: -x[1]):
+        pct = round(count / total_db_count * 100, 1) if total_db_count > 0 else 0
         major_categories.append({
-            'category_display': cat_display,
-            'count': c['count'],
+            'category_display': csv_name,
+            'count': count,
             'percentage': pct,
         })
 

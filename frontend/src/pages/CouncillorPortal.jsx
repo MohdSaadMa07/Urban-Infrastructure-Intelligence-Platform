@@ -851,16 +851,16 @@ const CouncillorPortal = () => {
               </div>
             )}
 
-            {/* ── Rising Issues (ML Anomaly Detection) ── */}
+            {/* ── City-Wide Trends (Praja CSV data) ── */}
             {d.failing_categories && d.failing_categories.length > 0 && (
               <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <TrendingUp size={16} color="#ef4444" />
                   <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f87171', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Categories on the Rise <span className="ml-badge">ML</span>
+                    City-Wide Trends <span className="ml-badge">ML</span>
                   </h3>
                   <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto' }}>
-                    3-year growth · Anomaly detection
+                    City-wide · 3-year growth
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -880,6 +880,9 @@ const CouncillorPortal = () => {
                       </span>
                     </div>
                   ))}
+                  <div style={{ fontSize: '0.65rem', color: '#64748b', textAlign: 'right', paddingRight: '0.2rem' }}>
+                    Based on city-wide Praja data · May not reflect your ward specifically
+                  </div>
                 </div>
               </div>
             )}
