@@ -19,6 +19,7 @@ from api.serializers import WardSerializer
 from ml.anomaly import detect_category_anomalies
 from ml.briefing import generate_ward_briefing
 from ml.ward_insights import compute_ward_category_scores
+from ml.ward_category_anomaly import detect_ward_category_anomalies
 from .twilio_views import send_status_update
 
 logger = logging.getLogger(__name__)
@@ -414,6 +415,12 @@ def _councillor_ward_dashboard(request):
         })
     failing_categories.sort(key=lambda x: x['recent_3yr_growth_pct'], reverse=True)
 
+    try:
+        ward_cat_anom = detect_ward_category_anomalies(ward.ward_name)
+    except Exception:
+        logger.exception("Ward-category anomaly detection failed for ward %s", ward.ward_name)
+        ward_cat_anom = []
+
     max_metric_year = ward.metrics.aggregate(m=Max('year'))['m'] or 9999
     ward_metrics_qs = ward.metrics.filter(year__lte=max_metric_year).order_by('year')
     ward_metrics_history = []
@@ -570,6 +577,7 @@ def _councillor_ward_dashboard(request):
         'predicted_data': predicted_data,
         'major_categories': major_categories,
         'failing_categories': failing_categories,
+        'ward_category_anomalies': ward_cat_anom,
         'escalation_data': _load_escalation_data(),
     })
 
