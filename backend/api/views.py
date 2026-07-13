@@ -388,17 +388,21 @@ def _councillor_ward_dashboard(request):
     complaints_by_cat = ward.complaints.values('category').annotate(count=Count('id')).order_by('-count')
     total_db_count = sum(c['count'] for c in complaints_by_cat)
 
+    conc_lookup = {a['category']: a['concentration'] for a in ward_cat_anom}
+
     major_categories = []
     category_choices_dict = dict(Complaint.CATEGORY_CHOICES)
     for c in complaints_by_cat:
         cat_code = c['category']
         cat_display = category_choices_dict.get(cat_code, cat_code)
         pct = round(c['count'] / total_db_count * 100, 1) if total_db_count > 0 else 0
+        conc = conc_lookup.get(cat_code, 1.0)
+        trend = 'rising' if conc >= 1.3 else ('falling' if conc <= 0.7 else 'stable')
         major_categories.append({
             'category_display': cat_display,
             'count': c['count'],
             'percentage': pct,
-            'trend': 'stable',
+            'trend': trend,
         })
 
     try:
@@ -415,12 +419,6 @@ def _councillor_ward_dashboard(request):
             'projected_next': int(c['latest'] * (1 + c['recent_3yr_growth_pct'] / 100)) if c['recent_3yr_growth_pct'] > 0 else c['latest']
         })
     failing_categories.sort(key=lambda x: x['recent_3yr_growth_pct'], reverse=True)
-
-    try:
-        ward_cat_anom = detect_ward_category_anomalies(ward.ward_name)
-    except Exception:
-        logger.exception("Ward-category anomaly detection failed for ward %s", ward.ward_name)
-        ward_cat_anom = []
 
     try:
         seasonal_advisories = generate_seasonal_advisories(ward_cat_anom, ward.ward_name)

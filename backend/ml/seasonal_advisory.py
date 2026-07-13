@@ -116,10 +116,8 @@ def generate_seasonal_advisories(anomaly_results, ward_name, current_month=None)
 
     advisories = []
     for cat, profile in SEASONAL_PROFILES.items():
-        if cat not in cat_lookup:
-            continue
-
         info = cat_lookup.get(cat, {})
+        has_data = cat in cat_lookup
         display_name = info.get('display_name', cat.replace('_', ' ').title())
         count = info.get('count', 0)
         expected = info.get('expected_count', 0)
@@ -138,14 +136,18 @@ def generate_seasonal_advisories(anomaly_results, ward_name, current_month=None)
         is_elevated = concentration >= 1.5
 
         lines = []
+        if not has_data:
+            data_note = f"No complaints reported yet in your ward."
+        else:
+            data_note = f"Total: {count} complaints."
+
         if status == 'pre_season':
             lines.append(
                 f"{display_name} complaints typically surge "
                 f"{profile['surge_factor']}x during {_month_range(profile['peak_months'])} "
                 f"({profile['reason'].split('.')[0].lower()})."
             )
-            if count > 0:
-                lines.append(f"Total complaints currently: {count}")
+            lines.append(data_note)
             if is_elevated:
                 lines.append(
                     f"⚠ Already {concentration:.1f}x higher than city average — pre-season levels are elevated. "
@@ -155,23 +157,19 @@ def generate_seasonal_advisories(anomaly_results, ward_name, current_month=None)
                 lines.append(f"Preparedness recommended: {profile['advice']}")
         elif status == 'peak_season':
             lines.append(f"{display_name} is at seasonal peak.")
-            if count > 0:
-                lines.append(f"Total complaints: {count} ({concentration:.1f}x city average).")
+            if has_data:
+                lines.append(f"{data_note} ({concentration:.1f}x city average).")
+            else:
+                lines.append(data_note)
             if is_elevated and severity != 'normal':
                 lines.append(
                     f"⚠ Volume is significantly above normal even for peak season. "
                     f"{profile['advice']}"
                 )
             else:
-                lines.append(
-                    f"Volume is within expected range for this season."
-                )
+                lines.append(f"Volume is within expected range for this season.")
         elif status == 'post_season':
-            lines.append(f"{display_name} peak season is ending.")
-            if count > 0:
-                lines.append(f"Total complaints: {count}. Continue monitoring — residual issues may persist.")
-            else:
-                lines.append(f"Continue monitoring — residual issues may persist.")
+            lines.append(f"{display_name} peak season is ending. {data_note} Continue monitoring.")
         elif upcoming_peak and status == 'normal':
             for check_month, label in check_months:
                 if _season_status(profile, check_month) == 'peak_season':
@@ -179,8 +177,7 @@ def generate_seasonal_advisories(anomaly_results, ward_name, current_month=None)
                         f"{display_name} complaints will enter peak season "
                         f"in {MONTH_NAMES[check_month]} (typically {profile['surge_factor']}x surge)."
                     )
-                    if count > 0:
-                        lines.append(f"Current total: {count}")
+                    lines.append(data_note)
                     if is_elevated:
                         lines.append(f"⚠ Already elevated — start preparations now.")
                     lines.append(f"Recommended: {profile['advice']}")

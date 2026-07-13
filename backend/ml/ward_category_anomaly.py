@@ -43,7 +43,7 @@ def _explain(cat_display, ward_name, concentration, count, expected):
         return (
             f"{cat_display} complaints in Ward {ward_name} are "
             f"{concentration:.1f}x {direction} than city distribution "
-            f"({count} actual vs {expected:.0f} expected)"
+            f"({count} actual vs {expected} expected)"
         )
     return "Within normal range."
 
@@ -79,7 +79,7 @@ def detect_ward_category_anomalies(ward_name):
         city_pct = city_pcts.get(cat_code, 0)
 
         concentration = round(ward_pct / city_pct, 2) if city_pct > 0 else 1.0
-        expected = round(ward_total_all * city_pct, 1)
+        expected = int(round(ward_total_all * city_pct))
         is_anomaly = concentration >= 1.5
 
         results.append({
