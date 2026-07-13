@@ -385,6 +385,12 @@ def _councillor_ward_dashboard(request):
             'escalation_rate': top_facility['escalation_rate'],
         }
 
+    try:
+        ward_cat_anom = detect_ward_category_anomalies(ward.ward_name)
+    except Exception:
+        logger.exception("Ward-category anomaly detection failed for ward %s", ward.ward_name)
+        ward_cat_anom = []
+
     complaints_by_cat = ward.complaints.values('category').annotate(count=Count('id')).order_by('-count')
     total_db_count = sum(c['count'] for c in complaints_by_cat)
 
