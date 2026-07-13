@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Hexagon, LogOut, Filter, AlertCircle, CheckCircle,
   MapPin, BarChart3, TrendingUp, RefreshCw, Sparkles, ListTodo, FileText,
-  ArrowUp, ArrowDown, Minus, Award, ChartPie
+  ArrowUp, ArrowDown, Minus, Award, ChartPie, AlertTriangle
 } from 'lucide-react';
 import {
   RadialBarChart, RadialBar, XAxis, YAxis, CartesianGrid,
@@ -836,6 +836,43 @@ const CouncillorPortal = () => {
                       </span>
                       <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
                         ~{c.projected_next?.toLocaleString()} next
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Ward Category Anomalies (DB-based) ── */}
+            {d.ward_category_anomalies && d.ward_category_anomalies.filter(a => a.is_anomaly).length > 0 && (
+              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(251,146,60,0.15)', borderRadius: 16, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <AlertTriangle size={16} color="#fb923c" />
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fb923c', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Ward-Level Issues <span className="ml-badge" style={{ background: 'rgba(251,146,60,0.2)', color: '#fb923c' }}>DB</span>
+                  </h3>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: 'auto' }}>
+                    Weekly z-score · Concentration
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {d.ward_category_anomalies.filter(a => a.is_anomaly).slice(0, 5).map(a => (
+                    <div key={a.category} style={{
+                      display: 'grid', gridTemplateColumns: '1fr auto',
+                      gap: '0.75rem', alignItems: 'center',
+                      padding: '0.55rem 0.8rem', borderRadius: 10,
+                      background: 'rgba(5,10,24,0.3)', border: '1px solid rgba(251,146,60,0.08)',
+                    }}>
+                      <div>
+                        <span style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 600, marginRight: '0.5rem' }}>{a.display_name}</span>
+                        <span style={{
+                          fontSize: '0.65rem', fontWeight: 600, padding: '1px 6px', borderRadius: 4, textTransform: 'uppercase',
+                          background: a.severity === 'critical' ? 'rgba(239,68,68,0.2)' : a.severity === 'major' ? 'rgba(251,146,60,0.2)' : 'rgba(251,191,36,0.2)',
+                          color: a.severity === 'critical' ? '#ef4444' : a.severity === 'major' ? '#fb923c' : '#fbbf24',
+                        }}>{a.severity}</span>
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8', textAlign: 'right', maxWidth: 280 }}>
+                        {a.explanation}
                       </span>
                     </div>
                   ))}
