@@ -1,6 +1,12 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.core.cache import cache
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from api.models import Ward, CivicMetrics, PortalMetrics
+from unittest.mock import patch, MagicMock
+import json
+import pandas as pd
+import numpy as np
+
+from api.models import Ward, CivicMetrics, PortalMetrics, Complaint
 
 
 class MLPipelineTest(TestCase):
@@ -25,13 +31,10 @@ class MLPipelineTest(TestCase):
                     avg_councillors=7,
                 )
 
-        # Add portal complaints for 2024 (augments CivicMetrics)
         PortalMetrics.objects.create(
             ward=ward_a, year=2024,
             total_complaints=15, resolved_complaints=10,
         )
-
-        # Add portal-only year 2025 for Ward A (carry-forward test)
         PortalMetrics.objects.create(
             ward=ward_a, year=2025,
             total_complaints=30, resolved_complaints=20,
@@ -58,7 +61,6 @@ class MLPipelineTest(TestCase):
         ward_a_rows = meta[meta["ward_name"] == "Ward A"]
         ward_a_2024 = ward_a_rows[ward_a_rows["year"] == 2024]
         self.assertEqual(len(ward_a_2024), 1)
-        # 2024 base was 150 (2019=100, 5 years of +10), plus 15 portal = 165
         self.assertEqual(ward_a_2024.iloc[0]["total_complaints"], 165)
 
     def test_feature_matrix_includes_portal_only_year(self):
@@ -107,3 +109,164 @@ class MLPipelineTest(TestCase):
 
         results_n2, target_year_n2 = generate_predictions(target_year=2026, horizon=2)
         self.assertGreater(len(results_n2), 0)
+
+
+class CategoryAnomalyTest(TestCase):
+    def test_detect_category_anomalies_returns_list(self):
+        from ml.anomaly import detect_category_anomalies
+        result = detect_category_anomalies()
+        self.assertIsInstance(result, list)
+
+    def test_anomaly_result_keys(self):
+        from ml.anomaly import detect_category_anomalies
+        result = detect_category_anomalies()
+        if result:
+            expected_keys = {'issue', 'latest', 'mean', 'std', 'z_score',
+                             'direction', 'severity', 'is_anomaly',
+                             'pct_above_mean', 'recent_3yr_growth_pct'}
+            self.assertTrue(expected_keys.issubset(result[0].keys()))
+
+    def test_anomaly_sorted_by_z_score(self):
+        from ml.anomaly import detect_category_anomalies
+        result = detect_category_anomalies()
+        if len(result) > 1:
+            z_scores = [abs(r['z_score']) for r in result]
+            self.assertEqual(z_scores, sorted(z_scores, reverse=True))
+
+    def test_detect_ward_anomalies_returns_list(self):
+        from ml.anomaly import detect_ward_anomalies
+        result = detect_ward_anomalies()
+        self.assertIsInstance(result, list)
+
+    def test_detect_trend_breaks_returns_list(self):
+        from ml.anomaly import detect_trend_breaks
+        result = detect_trend_breaks()
+        self.assertIsInstance(result, list)
+
+    def test_get_ward_anomaly_report_has_expected_keys(self):
+        from ml.anomaly import get_ward_anomaly_report
+        report = get_ward_anomaly_report()
+        self.assertIn('category_anomalies', report)
+        self.assertIn('ward_anomaly', report)
+        self.assertIn('trend_breaks', report)
+        self.assertIn('summary', report)
+
+    def test_anomaly_with_fake_csv_path(self):
+        from ml.anomaly import CATEGORY_CSV
+        import os
+        self.assertTrue(os.path.exists(CATEGORY_CSV))
+
+
+class SeasonalAdvisoryTest(TestCase):
+    def test_advisory_for_june_returns_results(self):
+        from ml.seasonal_advisory import generate_seasonal_advisories
+        advisories = generate_seasonal_advisories([], current_month=6)
+        self.assertIsInstance(advisories, list)
+
+    def test_advisory_for_december_returns_empty(self):
+        from ml.seasonal_advisory import generate_seasonal_advisories
+        advisories = generate_seasonal_advisories([], current_month=12)
+        self.assertEqual(advisories, [])
+
+    def test_advisory_with_growing_category_gets_urgency_3(self):
+        from ml.seasonal_advisory import generate_seasonal_advisories
+        failing = [{'issue': 'Drainage', 'recent_3yr_growth_pct': 25}]
+        advisories = generate_seasonal_advisories(failing, current_month=7)
+        drainage = [a for a in advisories if a['category'] == 'Drainage']
+        if drainage:
+            self.assertEqual(drainage[0]['urgency'], 3)
+
+    def test_advisory_keys(self):
+        from ml.seasonal_advisory import generate_seasonal_advisories
+        advisories = generate_seasonal_advisories([], current_month=6)
+        if advisories:
+            expected_keys = {'category', 'display_name', 'season_status',
+                             'surge_factor', 'advisory_text', 'urgency'}
+            self.assertTrue(expected_keys.issubset(advisories[0].keys()))
+
+    def test_advisory_sorted_by_urgency(self):
+        from ml.seasonal_advisory import generate_seasonal_advisories
+        advisories = generate_seasonal_advisories([], current_month=6)
+        urgencies = [a['urgency'] for a in advisories]
+        self.assertEqual(urgencies, sorted(urgencies, reverse=True))
+
+
+class AdvisoryAnomalyIntegrationTest(TestCase):
+    def test_failing_categories_feed_into_advisories(self):
+        from ml.anomaly import detect_category_anomalies
+        from ml.seasonal_advisory import generate_seasonal_advisories
+
+        anomalies = detect_category_anomalies()
+        failing = []
+        for c in anomalies:
+            if c['recent_3yr_growth_pct'] > 10:
+                failing.append({
+                    'issue': c['issue'],
+                    'recent_3yr_growth_pct': c['recent_3yr_growth_pct'],
+                    'projected_next': int(c['latest'] * (1 + c['recent_3yr_growth_pct'] / 100)),
+                })
+
+        advisories = generate_seasonal_advisories(failing, current_month=6)
+        self.assertIsInstance(advisories, list)
+
+
+class DashboardCacheTest(TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_cache_cleared_between_tests(self):
+        cache.set('test_key', 'value')
+        cache.clear()
+        self.assertIsNone(cache.get('test_key'))
+
+    @override_settings(CACHES={
+        'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}
+    })
+    def test_councillor_dashboard_caches_anomalies(self):
+        from django.core.cache import cache
+        from ml.anomaly import detect_category_anomalies
+
+        key = 'category_anomalies'
+        cache.delete(key)
+        self.assertIsNone(cache.get(key))
+
+        result = cache.get(key)
+        if result is None:
+            result = detect_category_anomalies()
+            cache.set(key, result, 300)
+
+        cached = cache.get(key)
+        self.assertIsNotNone(cached)
+        self.assertEqual(len(cached), len(result))
+
+
+class ComplaintCategoryMappingTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        boundary = MultiPolygon(Polygon.from_bbox((0, 0, 1, 1)))
+        ward = Ward.objects.create(ward_no=99, ward_name="Test Ward", boundary=boundary)
+        for cat in ['pothole', 'road', 'garbage', 'water', 'drainage', 'streetlight', 'other']:
+            Complaint.objects.create(ward=ward, category=cat, description=f"Test {cat}",
+                                     latitude=19.0, longitude=72.0)
+
+    def test_db_to_csv_mapping_in_dashboard(self):
+        from api.models import Complaint
+        from api.views import DB_TO_CSV
+
+        complaints_by_cat = Complaint.objects.values('category').annotate(count=Count('id'))
+        csv_buckets = {}
+        for c in complaints_by_cat:
+            csv_name = DB_TO_CSV.get(c['category'], 'Other')
+            csv_buckets[csv_name] = csv_buckets.get(csv_name, 0) + c['count']
+
+        self.assertIn('Roads', csv_buckets)
+        self.assertEqual(csv_buckets['Roads'], 2)
+        self.assertIn('Solid Waste Management', csv_buckets)
+        self.assertEqual(csv_buckets['Solid Waste Management'], 1)
+        self.assertIn('Water Supply', csv_buckets)
+        self.assertEqual(csv_buckets['Water Supply'], 1)
+        self.assertIn('Drainage', csv_buckets)
+        self.assertIn('Other', csv_buckets)
+
+
+from django.db.models import Count

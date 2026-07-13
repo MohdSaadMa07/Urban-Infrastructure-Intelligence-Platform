@@ -130,10 +130,21 @@ def random_point(bounds):
     lng = random.uniform(*bounds['lng'])
     return round(lat, 6), round(lng, 6)
 
-def random_date():
-    from django.utils import timezone
-    days_ago = random.randint(0, 180)
-    return timezone.now() - timedelta(days=days_ago)
+SEASONAL_BIAS = {
+    'pothole':      [1,1,1,1,2,2,3,3,3,3,2,1],  # peaks Jul-Oct (monsoon)
+    'garbage':      [2,2,2,2,2,2,2,2,2,2,2,2],  # flat year-round
+    'water':        [1,2,3,3,3,3,2,1,1,1,1,1],  # peaks Mar-Jun (summer)
+    'drainage':     [1,1,1,1,2,3,3,3,3,2,1,1],  # peaks Jun-Sep (monsoon)
+    'streetlight':  [2,2,2,2,2,2,2,2,2,2,2,2],  # flat
+    'road':         [1,1,1,1,2,2,3,3,3,3,2,1],  # peaks Jul-Oct (monsoon)
+}
+
+def random_date(category=None):
+    year = random.choice([2024, 2025, 2026])
+    weights = SEASONAL_BIAS.get(category, [1]*12)
+    month = random.choices(range(1, 13), weights=weights, k=1)[0]
+    day = random.randint(1, 28)
+    return timezone.datetime(year, month, day, tzinfo=timezone.get_current_timezone())
 
 def random_status():
     return random.choices(STATUS_CHOICES, weights=STATUS_WEIGHTS, k=1)[0]
@@ -190,7 +201,7 @@ class Command(BaseCommand):
                 lat, lng = random_point(bounds)
                 description = generate_description(category)
                 status = random_status()
-                created_at = random_date()
+                created_at = random_date(category)
                 resolved_at = created_at + timedelta(days=random.randint(3, 30)) if status == 'resolved' else None
 
                 Complaint.objects.create(

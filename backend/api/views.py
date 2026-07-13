@@ -28,6 +28,13 @@ logger = logging.getLogger(__name__)
 
 CACHE_TTL = 300
 
+DB_TO_CSV = {
+    'pothole': 'Roads', 'road': 'Roads',
+    'water': 'Water Supply', 'drainage': 'Drainage',
+    'garbage': 'Solid Waste Management',
+    'streetlight': 'Other', 'other': 'Other',
+}
+
 def home(request):
     return JsonResponse({
         "message": "API is working "
@@ -376,19 +383,12 @@ def _councillor_ward_dashboard(request):
             'escalation_rate': top_facility['escalation_rate'],
         }
 
-    db_to_csv = {
-        'pothole': 'Roads', 'road': 'Roads',
-        'water': 'Water Supply', 'drainage': 'Drainage',
-        'garbage': 'Solid Waste Management',
-        'streetlight': 'Other', 'other': 'Other',
-    }
-
     complaints_by_cat = ward.complaints.values('category').annotate(count=Count('id')).order_by('-count')
     total_db_count = sum(c['count'] for c in complaints_by_cat)
 
     csv_buckets = {}
     for c in complaints_by_cat:
-        csv_name = db_to_csv.get(c['category'], 'Other')
+        csv_name = DB_TO_CSV.get(c['category'], 'Other')
         csv_buckets[csv_name] = csv_buckets.get(csv_name, 0) + c['count']
 
     major_categories = []

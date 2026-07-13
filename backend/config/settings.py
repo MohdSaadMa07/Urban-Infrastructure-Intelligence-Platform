@@ -11,10 +11,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
-    from django.core.management.utils import get_random_secret_key
-    SECRET_KEY = get_random_secret_key()
-    import warnings
-    warnings.warn("DJANGO_SECRET_KEY not set; using a random key (sessions will invalidate on restart)")
+    key_file = BASE_DIR / 'secret_key.txt'
+    if key_file.exists():
+        SECRET_KEY = key_file.read_text().strip()
+    else:
+        from django.core.management.utils import get_random_secret_key
+        SECRET_KEY = get_random_secret_key()
+        key_file.write_text(SECRET_KEY)
+        import warnings
+        warnings.warn(f"DJANGO_SECRET_KEY not set; generated and saved to {key_file}")
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
 
