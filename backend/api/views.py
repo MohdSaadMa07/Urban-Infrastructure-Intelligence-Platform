@@ -16,17 +16,17 @@ from django.contrib.gis.geos import Point
 from api.models import Ward, CivicMetrics, Complaint, PortalMetrics, WardPrediction
 from api.services.health_score import compute_health_score
 from api.serializers import WardSerializer
+from django.core.cache import cache
+
 from ml.anomaly import detect_category_anomalies
 from ml.briefing import generate_ward_briefing
 from ml.ward_insights import compute_ward_category_scores
-from ml.ward_category_anomaly import detect_ward_category_anomalies
 from ml.seasonal_advisory import generate_seasonal_advisories
 from .twilio_views import send_status_update
 
 logger = logging.getLogger(__name__)
 
-_escalation_cache = None
-_escalation_cache_ttl = 0
+CACHE_TTL = 300
 
 def home(request):
     return JsonResponse({
@@ -353,16 +353,7 @@ def _councillor_ward_dashboard(request):
             'model_version': latest_prediction.model_version,
         }
 
-    db_categories = set(ward.complaints.values_list('category', flat=True))
-    mapping = {
-        'pothole': 'Roads',
-        'road': 'Roads',
-        'water': 'Water Supply',
-        'drainage': 'Drainage',
-        'garbage': 'Solid Waste Management',
-    }
-    ward_category_names = {mapping.get(c, c) for c in db_categories}
-    category_scores = compute_ward_category_scores(ward.ward_name, ward_category_names)
+    category_scores = compute_ward_category_scores(ward.ward_name)
 
     focus_facility = None
     if category_scores:
@@ -385,16 +376,8 @@ def _councillor_ward_dashboard(request):
             'escalation_rate': top_facility['escalation_rate'],
         }
 
-    try:
-        ward_cat_anom = detect_ward_category_anomalies(ward.ward_name)
-    except Exception:
-        logger.exception("Ward-category anomaly detection failed for ward %s", ward.ward_name)
-        ward_cat_anom = []
-
     complaints_by_cat = ward.complaints.values('category').annotate(count=Count('id')).order_by('-count')
     total_db_count = sum(c['count'] for c in complaints_by_cat)
-
-    conc_lookup = {a['category']: a['concentration'] for a in ward_cat_anom}
 
     major_categories = []
     category_choices_dict = dict(Complaint.CATEGORY_CHOICES)
@@ -402,20 +385,20 @@ def _councillor_ward_dashboard(request):
         cat_code = c['category']
         cat_display = category_choices_dict.get(cat_code, cat_code)
         pct = round(c['count'] / total_db_count * 100, 1) if total_db_count > 0 else 0
-        conc = conc_lookup.get(cat_code, 1.0)
-        trend = 'rising' if conc >= 1.3 else ('falling' if conc <= 0.7 else 'stable')
         major_categories.append({
             'category_display': cat_display,
             'count': c['count'],
             'percentage': pct,
-            'trend': trend,
         })
 
-    try:
-        cat_anom = detect_category_anomalies()
-    except Exception:
-        logger.exception("Category anomaly detection failed")
-        cat_anom = []
+    cat_anom = cache.get('category_anomalies')
+    if cat_anom is None:
+        try:
+            cat_anom = detect_category_anomalies()
+            cache.set('category_anomalies', cat_anom, CACHE_TTL)
+        except Exception:
+            logger.exception("Category anomaly detection failed")
+            cat_anom = []
 
     failing_categories = []
     for c in cat_anom:
@@ -426,11 +409,7 @@ def _councillor_ward_dashboard(request):
         })
     failing_categories.sort(key=lambda x: x['recent_3yr_growth_pct'], reverse=True)
 
-    try:
-        seasonal_advisories = generate_seasonal_advisories(ward_cat_anom, ward.ward_name)
-    except Exception:
-        logger.exception("Seasonal advisory generation failed for ward %s", ward.ward_name)
-        seasonal_advisories = []
+    seasonal_advisories = generate_seasonal_advisories(failing_categories)
 
     max_metric_year = ward.metrics.aggregate(m=Max('year'))['m'] or 9999
     ward_metrics_qs = ward.metrics.filter(year__lte=max_metric_year).order_by('year')
@@ -588,7 +567,6 @@ def _councillor_ward_dashboard(request):
         'predicted_data': predicted_data,
         'major_categories': major_categories,
         'failing_categories': failing_categories,
-        'ward_category_anomalies': ward_cat_anom,
         'seasonal_advisories': seasonal_advisories,
         'escalation_data': _load_escalation_data(),
     })
@@ -678,16 +656,14 @@ def trend_data(request):
 
 
 def _load_escalation_data():
-    global _escalation_cache, _escalation_cache_ttl
-    now = time.time()
-    if _escalation_cache is not None and now < _escalation_cache_ttl:
-        return _escalation_cache
+    result = cache.get('escalation_data')
+    if result is not None:
+        return result
 
     path = Path(__file__).resolve().parent.parent / 'data' / 'escalation_data.csv'
     if not path.exists():
-        _escalation_cache = []
-        _escalation_cache_ttl = now + 60
-        return _escalation_cache
+        return []
+
     result = []
     with open(path, newline='', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
@@ -702,8 +678,7 @@ def _load_escalation_data():
                 'escalated': escalated,
                 'escalation_rate': round(escalated / total, 3) if total > 0 else 0,
             })
-    _escalation_cache = result
-    _escalation_cache_ttl = now + 300
+    cache.set('escalation_data', result, CACHE_TTL)
     return result
 
 

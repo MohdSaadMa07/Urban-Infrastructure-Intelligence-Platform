@@ -100,6 +100,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'TIMEOUT': 300,
+    }
+}
+
 DATABASE_URL = os.getenv('DATABASE_URL')
 if DATABASE_URL:
     import dj_database_url
