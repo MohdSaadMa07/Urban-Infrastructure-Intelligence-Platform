@@ -46,8 +46,18 @@
 .powerbi-report-card h3 { margin: 0 0 .35rem; color: #202b3a; font-size: 1rem; }
 .powerbi-report-card p { margin: 0; }
 .powerbi-source-note { margin-top: 1.5rem; padding: 1rem 1.15rem; border-left: 4px solid #f2c811; background: #fffbea; }
+.powerbi-static-report { max-width: 1400px; margin: 0 auto; padding: 2rem 4vw 3rem; }
+.powerbi-full-report { margin: 0; overflow: hidden; background: #fff; border: 1px solid #dce3ee; box-shadow: 0 4px 18px rgba(30, 56, 90, .08); }
+.powerbi-full-report img { display: block; width: 100%; height: auto; }
+.powerbi-full-report figcaption { padding: .7rem 1rem; color: #697586; font-size: .78rem; border-top: 1px solid #dce3ee; }
+.powerbi-chart-guide { margin-top: 2rem; }
+.powerbi-chart-guide h2 { margin-bottom: 1rem; color: #182230; font-size: 1.35rem; }
+.powerbi-chart-explanations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.powerbi-chart-explanations article { padding: 1rem 1.15rem; background: #fff; border: 1px solid #dce3ee; border-left: 4px solid #1686e8; }
+.powerbi-chart-explanations h3 { margin: 0 0 .4rem; color: #202b3a; font-size: .95rem; }
+.powerbi-chart-explanations p { margin: 0; color: #526070; font-size: .88rem; line-height: 1.55; }
 @media (max-width: 760px) { .powerbi-header { align-items: flex-start; flex-wrap: wrap; gap: .7rem; } .powerbi-header h1 { font-size: 1.1rem; } .powerbi-back { margin-left: 0; } .powerbi-grid { grid-template-columns: 1fr; } .powerbi-panel.wide { grid-column: auto; } .powerbi-filter-note { margin-left: 0; } .investigation-flow { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .powerbi-report-pages { padding-top: 1.25rem; } .powerbi-report-gallery { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .powerbi-report-pages, .powerbi-static-report { padding-top: 1.25rem; } .powerbi-report-gallery, .powerbi-chart-explanations { grid-template-columns: 1fr; } }
 
 /* =======================================================
    RESET & BASE
