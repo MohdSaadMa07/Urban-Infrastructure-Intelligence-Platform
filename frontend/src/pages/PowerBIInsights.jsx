@@ -25,7 +25,7 @@ function PowerBIInsights() {
   const [health, setHealth] = useState([]);
   const [councillors, setCouncillors] = useState([]);
   const [complaints, setComplaints] = useState([]);
-  const [activePage, setActivePage] = useState('intelligence');
+  const [activePage, setActivePage] = useState('overview');
   const [selectedWard, setSelectedWard] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
