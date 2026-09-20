@@ -1,15 +1,49 @@
 # UrbanIQ — Mumbai Urban Intelligence Platform
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=fff)](https://www.python.org/)
-[![Django](https://img.shields.io/badge/Django-5.2-092E20?logo=django)](https://www.djangoproject.com/)
-[![PostGIS](https://img.shields.io/badge/PostGIS-3-316192?logo=postgresql&logoColor=fff)](https://postgis.net/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite)](https://vite.dev/)
-[![XGBoost](https://img.shields.io/badge/XGBoost-2.1-EC1C24)](https://xgboost.readthedocs.io/)
-[![Leaflet](https://img.shields.io/badge/Leaflet-1.9-199900?logo=leaflet)](https://leafletjs.com/)
-[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)](https://www.docker.com/)
-[![Twilio](https://img.shields.io/badge/Twilio-F22F46?logo=twilio)](https://www.twilio.com/)
-[![Celery](https://img.shields.io/badge/Celery-5.6-37814A?logo=celery)](https://docs.celeryq.dev/)
+UrbanIQ is a full-stack civic-intelligence platform for analysing infrastructure complaints and ward performance across Mumbai. It pairs a production-style Django REST backend with a data analytics layer that turns complaint, resolution, engagement, and geospatial data into operational views for citizens, councillors, and administrators.
+
+## Why this project matters for backend and data roles
+
+**Backend development**
+
+- Models a real civic domain with Django, DRF, JWT role-based access, PostgreSQL/PostGIS, file uploads, and public/authenticated APIs.
+- Delivers complaint intake and tracking, ward boundaries as GeoJSON, health scores, councillor dashboards, report generation, and WhatsApp webhook workflows.
+- Uses Docker, Gunicorn, WhiteNoise, environment configuration, migrations, management commands, and scheduled/background processing patterns for deployment-ready services.
+
+**Analytics and data work**
+
+- Integrates ward-level civic metrics, complaint records, category-level history, and spatial boundaries into a common reporting model.
+- Calculates ward health indicators from complaint burden, service resolution, and civic engagement; supports comparison across all 24 wards.
+- Applies exploratory analysis, anomaly detection, clustering, forecasting, and category-level breakdowns to identify demand, bottlenecks, and wards needing attention.
+- Presents analytical outputs through dashboards and five documented Power BI report exports: Ward Overview, Complaint Intelligence, Civic Performance, Complaint Investigation, and Ward Details.
+
+This makes the repository relevant to backend engineer, data analyst, BI analyst, analytics engineer, and applied data/ML roles—not just frontend visualisation work.
+
+## Power BI analytics layer
+
+The Power BI pages are original exported report visuals, surfaced in the application as separate tabs with page-specific interpretation. They communicate both the metrics and the operational signal behind them: complaint mix, ward health variation, resolution-time delays, civic-engagement outliers, drill-down paths, and workload backlog.
+
+![UrbanIQ Power BI report overview](docs/powerbi-pages/Main%20page.png)
+
+Key examples from the reports:
+
+- Potholes and garbage are the largest complaint categories in the overview, together representing over half of the displayed category records.
+- The category performance page shows a meaningful resolution-time gap: road issues take the longest to resolve in the displayed analysis.
+- The civic-performance scatter plot reveals both high-performing engagement/health outliers and a low-health warning outlier.
+- Ward B’s detail page shows a 20% resolution rate and an 80% open/in-progress backlog, converting raw counts into a clear operational priority.
+
+## Technology at a glance
+
+| Area | Implementation |
+|---|---|
+| API & business logic | Python 3.12, Django 5.2, Django REST Framework |
+| Data storage & spatial analysis | PostgreSQL, PostGIS, GeoJSON |
+| Analytics & ML | pandas, NumPy, scikit-learn, XGBoost, DBSCAN, z-score anomaly detection |
+| BI & visual analysis | Power BI report exports, React report pages, Recharts |
+| Web client | React 19, Vite, React Router, Leaflet |
+| Operations | Docker multi-stage build, Gunicorn, WhiteNoise, Celery/Redis patterns, Render |
+
+## Technical reference
 
 UrbanIQ is an open civic-tech platform that tracks infrastructure health across Mumbai's 24 municipal wards. It aggregates public complaint data from the Praja Foundation, allows citizens to file new complaints via web or WhatsApp, computes ward-level health scores from civic metrics, and uses XGBoost to forecast complaint volumes and risk levels 1–2 years ahead. The platform also runs z-score anomaly detection on 18 Praja complaint categories and generates proactive seasonal advisories for councillors.
 
