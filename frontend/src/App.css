@@ -56,6 +56,8 @@
 .powerbi-chart-explanations article { padding: 1rem 1.15rem; background: #fff; border: 1px solid #dce3ee; border-left: 4px solid #1686e8; }
 .powerbi-chart-explanations h3 { margin: 0 0 .4rem; color: #202b3a; font-size: .95rem; }
 .powerbi-chart-explanations p { margin: 0; color: #526070; font-size: .88rem; line-height: 1.55; }
+.powerbi-chart-explanations .powerbi-chart-reading { margin-top: .7rem; color: #344a63; }
+.powerbi-chart-reading strong { color: #1686e8; }
 @media (max-width: 760px) { .powerbi-header { align-items: flex-start; flex-wrap: wrap; gap: .7rem; } .powerbi-header h1 { font-size: 1.1rem; } .powerbi-back { margin-left: 0; } .powerbi-grid { grid-template-columns: 1fr; } .powerbi-panel.wide { grid-column: auto; } .powerbi-filter-note { margin-left: 0; } .investigation-flow { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .powerbi-report-pages, .powerbi-static-report { padding-top: 1.25rem; } .powerbi-report-gallery, .powerbi-chart-explanations { grid-template-columns: 1fr; } }
 
