@@ -56,6 +56,7 @@ export default function Navbar({ showReportBtn, onReportClick }) {
         <a href="/#map-section" onClick={closeMobile}>Live Map</a>
         <Link to="/complaints-map" onClick={closeMobile}>Complaint Map</Link>
         <Link to="/dashboard" onClick={closeMobile}>Dashboard</Link>
+        <Link to="/powerbi" onClick={closeMobile}>Power BI Reports</Link>
         <Link to="/public" onClick={closeMobile}>City Summary</Link>
         <a href="/#features" onClick={closeMobile}>Features</a>
 

@@ -151,6 +151,9 @@ const Dashboard = () => {
         <Link to="/complaints-map" className="dash-nav-item" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', color: '#94a3b8', fontSize: '0.85rem', borderRadius: 8 }}>
           <MapPin size={18} /> Complaint Map
         </Link>
+        <Link to="/powerbi" className="dash-nav-item" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', color: '#94a3b8', fontSize: '0.85rem', borderRadius: 8 }}>
+          <BarChart2 size={18} /> Power BI Views
+        </Link>
         <a href="/" className="dash-back-link" id="back-to-home">
           &lt; Back to Home
         </a>

@@ -17,6 +17,7 @@ import Signup from './pages/Signup';
 import CouncillorPortal from './pages/CouncillorPortal';
 import PublicDashboard from './pages/PublicDashboard';
 import ComplaintsMap from './pages/ComplaintsMap';
+import PowerBIInsights from './pages/PowerBIInsights';
 import './App.css';
 
 /* --- Navbar Auth Actions --- */
@@ -446,6 +447,7 @@ function App() {
           <Route path="/councillor-portal" element={<CouncillorPortal />} />
           <Route path="/public" element={<PublicDashboard />} />
           <Route path="/complaints-map" element={<ComplaintsMap />} />
+          <Route path="/powerbi" element={<PowerBIInsights />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
