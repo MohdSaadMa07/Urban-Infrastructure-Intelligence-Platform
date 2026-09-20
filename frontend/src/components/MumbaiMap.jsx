@@ -25,13 +25,14 @@ const MumbaiMap = ({ onWardClick }) => {
       fetch(`${API_BASE}/health-scores/`).then(r => r.json()),
     ])
       .then(([geo, scores]) => {
+        const scoreRows = Array.isArray(scores) ? scores : Array.isArray(scores?.results) ? scores.results : [];
         // Build a lookup: ward_name -> full score data
         const map = {};
-        scores.forEach(s => {
+        scoreRows.forEach(s => {
           map[s.ward_name] = s;
         });
         setHealthMap(map);
-        setHealthData(scores);
+        setHealthData(scoreRows);
         setGeoData(geo);
       })
       .catch(error => console.error("Error fetching ward data:", error));
@@ -123,8 +124,8 @@ const MumbaiMap = ({ onWardClick }) => {
         scrollWheelZoom={true}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {geoData && (
           <GeoJSON 

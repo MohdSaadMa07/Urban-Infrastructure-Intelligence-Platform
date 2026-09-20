@@ -62,9 +62,9 @@ const Dashboard = () => {
       fetch(`${API_BASE}/councillors/`).then(r => r.json()),
       fetch(`${API_BASE}/trends/`).then(r => r.json()),
     ]).then(([health, council, trends]) => {
-      setHealthData(health);
-      setCouncillorData(council);
-      setTrendData(trends);
+      setHealthData(Array.isArray(health) ? health : Array.isArray(health?.results) ? health.results : []);
+      setCouncillorData(Array.isArray(council) ? council : Array.isArray(council?.results) ? council.results : []);
+      setTrendData(Array.isArray(trends) ? trends : Array.isArray(trends?.results) ? trends.results : []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);

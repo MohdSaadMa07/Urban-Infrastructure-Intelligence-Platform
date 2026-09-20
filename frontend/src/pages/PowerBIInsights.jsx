@@ -31,15 +31,9 @@ function PowerBIInsights() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      fetch(`${API_BASE}/health-scores/`).then(response => response.json()),
-      fetch(`${API_BASE}/councillors/`).then(response => response.json()),
-      fetch(`${API_BASE}/complaints/?page_size=500`).then(response => response.json()),
-    ]).then(([healthData, councillorData, complaintData]) => {
-      setHealth(healthData);
-      setCouncillors(councillorData);
-      setComplaints(Array.isArray(complaintData) ? complaintData : complaintData.results || []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    // This route intentionally displays static Power BI exports. Do not fetch
+    // live API data here: it is neither used nor required to read the reports.
+    setLoading(false);
   }, []);
 
   const filteredComplaints = useMemo(() => complaints.filter(complaint =>
