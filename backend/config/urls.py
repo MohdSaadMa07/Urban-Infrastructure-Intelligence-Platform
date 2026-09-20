@@ -17,6 +17,11 @@ if frontend_dist.exists():
         re_path(r'^assets/(?P<path>.*)$', serve, {
             'document_root': str(frontend_dist / 'assets'),
         }),
+        # Vite copies public files unchanged to the build root. Keep the
+        # Power BI report exports available to the React report gallery.
+        re_path(r'^powerbi-pages/(?P<path>.*)$', serve, {
+            'document_root': str(frontend_dist / 'powerbi-pages'),
+        }),
     ]
 
 # Serve React frontend for all other routes (SPA catch-all)
