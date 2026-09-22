@@ -12,7 +12,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../context/AuthContext';
-import API_BASE from '../config';
+import API_BASE, { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from '../config';
 
 // DivIcon-based markers (no image path issues with bundlers)
 import L from 'leaflet';
@@ -409,7 +409,7 @@ const CouncillorPortal = () => {
                 </div>
                 <MapContainer center={[19.076, 72.877]} zoom={12} style={{ height: 380, borderRadius: 12, zIndex: 1 }}
                   key={d.ward.ward_name}>
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  <TileLayer attribution={MAP_TILE_ATTRIBUTION} url={MAP_TILE_URL} />
                   {d.complaints.filter(c => c.latitude != null && c.longitude != null).map(c => (
                     <Marker key={c.id} position={[Number(c.latitude), Number(c.longitude)]} icon={createPinIcon(c.category)}>
                       <Popup>

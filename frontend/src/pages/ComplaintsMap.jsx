@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, GeoJSON, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Hexagon, Filter, MapPin, X } from 'lucide-react';
-import API_BASE from '../config';
+import API_BASE, { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from '../config';
 
 const CATEGORY_COLORS = {
   'Garbage': '#f59e0b',
@@ -178,8 +178,8 @@ export default function ComplaintsMap() {
           <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #1e293b', height: '75vh', minHeight: 500 }}>
             <MapContainer center={[19.076, 72.877]} zoom={11} style={{ height: '100%', width: '100%' }}>
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution={MAP_TILE_ATTRIBUTION}
+                url={MAP_TILE_URL}
               />
               {geoData && (
                 <GeoJSON data={geoData} style={wardStyle} onEachFeature={onEachWard} />

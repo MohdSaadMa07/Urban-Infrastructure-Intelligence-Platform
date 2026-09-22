@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import API_BASE from '../config';
+import API_BASE, { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from '../config';
 
 // Health score color mapping -- transparent fills
 const getHealthColor = (label) => {
@@ -124,8 +124,8 @@ const MumbaiMap = ({ onWardClick }) => {
         scrollWheelZoom={true}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={MAP_TILE_ATTRIBUTION}
+          url={MAP_TILE_URL}
         />
         {geoData && (
           <GeoJSON 
