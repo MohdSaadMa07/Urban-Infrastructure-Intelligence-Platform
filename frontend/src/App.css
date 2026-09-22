@@ -47,6 +47,11 @@
 .powerbi-report-card p { margin: 0; }
 .powerbi-source-note { margin-top: 1.5rem; padding: 1rem 1.15rem; border-left: 4px solid #f2c811; background: #fffbea; }
 .powerbi-static-report { max-width: 1400px; margin: 0 auto; padding: 2rem 4vw 3rem; }
+.powerbi-embed { overflow: hidden; min-height: 720px; background: #fff; border: 1px solid #dce3ee; box-shadow: 0 4px 18px rgba(30, 56, 90, .08); }
+.powerbi-embed iframe { display: block; width: 100%; min-height: 720px; border: 0; }
+.powerbi-archive { margin-top: 1.25rem; color: #526070; }
+.powerbi-archive summary { width: fit-content; cursor: pointer; font-size: .9rem; font-weight: 700; }
+.powerbi-archive .powerbi-full-report { margin-top: 1rem; }
 .powerbi-full-report { margin: 0; overflow: hidden; background: #fff; border: 1px solid #dce3ee; box-shadow: 0 4px 18px rgba(30, 56, 90, .08); }
 .powerbi-full-report img { display: block; width: 100%; height: auto; }
 .powerbi-full-report figcaption { padding: .7rem 1rem; color: #697586; font-size: .78rem; border-top: 1px solid #dce3ee; }
@@ -59,7 +64,7 @@
 .powerbi-chart-explanations .powerbi-chart-reading { margin-top: .7rem; color: #344a63; }
 .powerbi-chart-reading strong { color: #1686e8; }
 @media (max-width: 760px) { .powerbi-header { align-items: flex-start; flex-wrap: wrap; gap: .7rem; } .powerbi-header h1 { font-size: 1.1rem; } .powerbi-back { margin-left: 0; } .powerbi-grid { grid-template-columns: 1fr; } .powerbi-panel.wide { grid-column: auto; } .powerbi-filter-note { margin-left: 0; } .investigation-flow { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .powerbi-report-pages, .powerbi-static-report { padding-top: 1.25rem; } .powerbi-report-gallery, .powerbi-chart-explanations { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .powerbi-report-pages, .powerbi-static-report { padding-top: 1.25rem; } .powerbi-report-gallery, .powerbi-chart-explanations { grid-template-columns: 1fr; } .powerbi-embed, .powerbi-embed iframe { min-height: 560px; } }
 
 /* =======================================================
    RESET & BASE

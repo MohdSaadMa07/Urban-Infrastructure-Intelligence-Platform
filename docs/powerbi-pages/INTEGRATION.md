@@ -1,7 +1,7 @@
 # Power BI page integration
 
-The public UrbanIQ website now has a Power BI-inspired interactive view at `/powerbi`.
-It recreates the five website pages from the uploaded exports with React and Recharts. `Main page.png` remains a README portfolio image and is intentionally not used as an application page.
+The public UrbanIQ website now has a live embedded Power BI report at `/powerbi`.
+The supplied report-page exports are still retained in this folder and under `frontend/public/powerbi-pages/`; the application exposes each as a collapsible archived reference below the live report, alongside its chart interpretation. `Main page.png` remains a README portfolio image and is intentionally not used as an application page.
 
 ## Page and chart purpose
 
